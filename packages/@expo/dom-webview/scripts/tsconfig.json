@@ -1,7 +1,0 @@
-{
-  "extends": "expo-module-scripts/tsconfig.node",
-  "compilerOptions": {
-    "noEmit": true
-  },
-  "include": ["./**/*.ts"]
-}

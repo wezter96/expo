@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Kinly",
+    "slug": "kinly",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "kinly",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0B5FA5"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B5FA5"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0B5FA5",
+          "resizeMode": "contain"
+        }
+      ]
+    ],
+    "extra": {
+      "aiApiKey": "",
+      "aiModel": "claude-haiku-4-5-20251001"
+    }
+  }
+}

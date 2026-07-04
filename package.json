@@ -1,54 +1,40 @@
 {
-  "name": "@expo/expo",
-  "version": "1.4.0",
-  "private": true,
-  "author": "Expo",
-  "license": "MIT",
+  "name": "kinly",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
   "scripts": {
-    "setup:docs": "./scripts/download-dependencies.sh",
-    "setup:native": "./scripts/download-dependencies.sh && ./scripts/setup-react-android.sh",
-    "postinstall": "yarn-deduplicate && yarn workspace @expo/cli prepare && patch-package && node ./tools/bin/expotools.js validate-workspace-dependencies",
-    "install:react-native-lab": "(([ \"$(ls -A react-native-lab/react-native)\" ] && (yarn --cwd react-native-lab/react-native install --frozen-lockfile || true)) || echo \"Skipping installing Node modules in react-native-lab/react-native (directory empty)\")",
-    "lint": "eslint .",
-    "tsc": "echo 'You are trying to run \"tsc\" in the workspace root. Run it from an individual package instead.' && exit 1"
-  },
-  "workspaces": {
-    "packages": [
-      "apps/*",
-      "packages/*",
-      "packages/@expo/*"
-    ]
-  },
-  "resolutions": {
-    "@expo/metro": "~54.1.0",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "@types/babel__core": "^7.20.5",
-    "@types/babel__generator": "^7.27.0",
-    "@types/babel__template": "^7.4.4",
-    "@types/babel__traverse": "^7.20.7",
-    "@react-navigation/bottom-tabs": "7.7.3",
-    "@react-navigation/core": "7.13.0",
-    "@react-navigation/drawer": "7.7.2",
-    "@react-navigation/elements": "2.8.1",
-    "@react-navigation/native": "7.1.19",
-    "@react-navigation/native-stack": "7.6.2",
-    "@react-navigation/routers": "7.5.1",
-    "@react-navigation/stack": "7.6.2",
-    "**/util": "~0.12.4"
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "lint": "expo lint"
   },
   "dependencies": {
-    "eslint": "^8.57.1",
-    "jsc-android": "^250231.0.0",
-    "node-gyp": "^10.0.1",
-    "patch-package": "^8.0.0",
-    "prettier": "^3.4.2",
-    "yarn-deduplicate": "^6.0.2"
-  },
-  "volta": {
-    "node": "22.14.0"
+    "@expo/vector-icons": "^15.0.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/native": "^7.1.19",
+    "expo": "~54.0.8",
+    "expo-constants": "~18.0.9",
+    "expo-linking": "~8.0.8",
+    "expo-router": "~6.0.6",
+    "expo-speech": "~14.0.7",
+    "expo-splash-screen": "~31.0.10",
+    "expo-status-bar": "~3.0.8",
+    "expo-system-ui": "~6.0.7",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.81.4",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.18.0",
+    "react-native-web": "~0.21.0"
   },
   "devDependencies": {
-    "ts-node": "^10.9.2"
-  }
+    "@types/react": "~19.1.1",
+    "babel-preset-expo": "~54.0.11",
+    "typescript": "~5.9.2",
+    "eslint": "^9.25.0",
+    "eslint-config-expo": "~10.0.0"
+  },
+  "private": true
 }
