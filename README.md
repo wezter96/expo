@@ -1,31 +1,47 @@
 # Kinly 👵📱
 
-A **dead-simple messaging app for older adults** to stay in touch with family and
-friends. Think Signal or Messenger, stripped down to only what matters, with big
-text, big buttons, and a friendly AI assistant you can just *tell* what you want
-to do.
+A **dead-simple messaging app for older adults** to stay in touch with family
+and friends — plus a friendly **AI assistant** you can just *tell* what to do
+("Call Mary", "Tell Tom I'll be late"). Think Signal or Messenger, stripped down
+to only what matters, with big text, big buttons, and read-aloud everywhere.
 
-Built with [Expo](https://expo.dev) (React Native) so it runs on both iOS and
-Android from one codebase.
+This is a **type-safe monorepo** scaffolded with
+[Better-T-Stack](https://www.better-t-stack.dev/): an Expo (React Native) app
+talking to a Hono + tRPC backend over end-to-end typed APIs.
 
 ---
 
+## What's inside
+
+```
+apps/
+  native/      Expo (React Native) app — the elderly-friendly UI
+  server/      Hono server exposing the tRPC API (Node runtime)
+packages/
+  api/         tRPC routers (contacts, messages, assistant) + AI agent
+  db/          Drizzle ORM schema + libSQL (SQLite) client + seed data
+  env/         Type-safe environment variables (server & native)
+  config/      Shared TypeScript config
+```
+
+**Stack:** Expo Router · React Native · tRPC · Hono · Drizzle ORM · libSQL
+(SQLite) · Turborepo · TypeScript.
+
 ## Why Kinly
 
-Most messaging apps are overwhelming for older users: tiny text, hidden menus,
-endless settings, and confusing gestures. Kinly is designed around a few rules:
+Most messaging apps overwhelm older users: tiny text, hidden menus, confusing
+gestures. Kinly is built around a few rules:
 
 - **Large, high-contrast type** — body text never below 20pt, buttons at 24pt.
 - **Big touch targets** — every tappable thing is at least 64pt tall.
-- **One clear path** — a home screen with three obvious choices, no hidden menus.
+- **One clear path** — a home screen with a few obvious choices, no hidden menus.
 - **Read aloud** — any received message can be spoken out loud (tap the speaker).
-- **Talk, don't tap** — an AI assistant lets you say *"Call my daughter"* or
-  *"Tell Tom I'll be late"* and it does it for you.
+- **Talk, don't tap** — the AI assistant turns plain language into actions.
 
 ## The AI Assistant 🤖
 
-The **Assistant** screen is the heart of the app. You type (or, on a real device,
-dictate) a plain-language request and it figures out what to do:
+The **Assistant** screen is the heart of the app. You type (or, on a real
+device, dictate) a plain-language request and it figures out what to do:
 
 | You say | What happens |
 | --- | --- |
@@ -37,74 +53,81 @@ dictate) a plain-language request and it figures out what to do:
 Anything that reaches out (a call or a sent message) always shows a big
 **Yes / No** confirmation first, so nothing happens by accident.
 
-### Two engines, always works
+**The AI runs on the server** (`packages/api/src/lib/agent.ts`), reached through
+the `assistant.run` tRPC procedure. That keeps any Anthropic API key on the
+server, never on the device. Two engines, so it always works:
 
-1. **Claude (Anthropic) API** — when an API key is configured, free-form and
-   fuzzy requests are understood robustly via tool-calling.
-2. **Built-in offline parser** — a rule-based fallback so the app is fully usable
-   with **no key and no network**. If an AI call fails, it silently falls back.
+1. **Claude (Anthropic) API** — when `ANTHROPIC_API_KEY` is set on the server,
+   free-form requests are understood via tool-calling.
+2. **Built-in rule-based parser** — a fallback so the assistant works with no
+   key and no network. If the server is unreachable, the app even falls back to
+   an on-device copy of the parser, so the feature is never dead.
 
-To enable the Claude engine, set your key in `app.json` under `expo.extra.aiApiKey`
-(or the `EXPO_PUBLIC_AI_API_KEY` environment variable) and optionally choose a
-model with `expo.extra.aiModel` (default: `claude-haiku-4-5-20251001`).
+## Offline-first
 
-> Note: for a production app you would proxy AI requests through your own backend
-> rather than shipping a key in the client.
-
-## Screens
-
-- **Home** (`app/index.tsx`) — big buttons: Talk to Assistant, Messages, People,
-  plus recent conversations.
-- **People** (`app/contacts.tsx`) — each person as a large card with **Message**
-  and **Call** buttons. Groups too.
-- **Chat** (`app/chat/[id].tsx`) — large message bubbles, tap the speaker to hear
-  a message, big send box, call button in the header.
-- **Assistant** (`app/assistant.tsx`) — the conversational AI helper.
+The app is fully usable with **no server running**: contacts and messages are
+seeded locally and persisted with `AsyncStorage`. When `EXPO_PUBLIC_SERVER_URL`
+is set, the app hydrates from the server (source of truth), sends messages
+through `messages.send`, and routes the assistant through `assistant.run` — all
+best-effort, with graceful fallback to local data.
 
 ## Getting started
 
+Requires Node 22+ (a `bun`-based flow works too). From the repo root:
+
 ```bash
-cd kinly        # (this app lives at the repo root)
 npm install
-npx expo start
+
+# 1. Create the SQLite tables
+npm run db:push
+
+# 2. Start the tRPC server (http://localhost:3000)
+npm run dev:server
+
+# 3. In another terminal, start the app
+npm run dev:native
 ```
 
-Then scan the QR code with the **Expo Go** app on your phone, or press `i` / `a`
-to open an iOS / Android simulator.
+Then scan the QR code with **Expo Go**, or press `i` / `a` for a simulator.
 
-## How data works
+To connect the app to the server, copy `apps/native/.env.example` to
+`apps/native/.env` and set `EXPO_PUBLIC_SERVER_URL` to your machine's LAN IP
+(e.g. `http://192.168.1.20:3000`) — `localhost` won't resolve from a phone.
+Leave it unset to run the app fully offline.
 
-Contacts and messages are stored **locally on the device** with
-`AsyncStorage` and seeded with sample family contacts on first run
-(`src/seed.ts`). There is no server — this is a self-contained starter you can
-wire up to a real backend (Signal-style E2E messaging, your own API, etc.).
+Optional AI: copy `apps/server/.env.example` to `apps/server/.env` and set
+`ANTHROPIC_API_KEY` to enable Claude-powered understanding.
 
-## Project structure
+## Useful scripts
 
-```
-app/                 Screens (Expo Router file-based routing)
-  _layout.tsx        Navigation + providers
-  index.tsx          Home
-  contacts.tsx       People
-  assistant.tsx      AI assistant
-  chat/[id].tsx      Conversation
-src/
-  theme.ts           Design tokens tuned for older eyes/hands
-  store.tsx          Local persistent data (contacts, messages)
-  seed.ts            First-run sample data
-  types.ts           Data types
-  time.ts            Friendly timestamps
-  ai/agent.ts        AI intent → action (Claude + offline fallback)
-  components/        Avatar, BigButton
-```
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Run everything via Turborepo |
+| `npm run dev:server` | Start only the tRPC/Hono server |
+| `npm run dev:native` | Start only the Expo app |
+| `npm run db:push` | Apply the Drizzle schema to SQLite |
+| `npm run db:studio` | Open Drizzle Studio |
+| `npm run check-types` | Type-check every package |
+
+## The API
+
+Type-safe tRPC procedures (see `packages/api/src/routers`):
+
+- `contacts.list` — all contacts and groups
+- `messages.list({ contactId })` — a conversation, oldest first
+- `messages.send({ contactId, text })` — send a message (persisted)
+- `assistant.run({ text })` — interpret a request → `{ say, action, needsConfirm }`
+
+The app imports only `import type { AppRouter }`, so no server code is bundled
+into the mobile app — just full end-to-end type safety over HTTP.
 
 ## Roadmap ideas
 
 - On-device speech-to-text for true hands-free use
-- Real backend + end-to-end encryption
+- Real auth + end-to-end encryption
 - Photo sharing and video calls
+- Push notifications for new messages
 - An even larger "extra big" accessibility mode
-- Emergency / favourite contact pinned to the top
 
 ---
 

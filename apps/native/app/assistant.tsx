@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AgentAction, AgentResult, aiConfigured, runAgent } from '../src/ai/agent';
+import { askServerAssistant, serverEnabled } from '../src/api/client';
 import { useStore } from '../src/store';
 import { colors, fonts, radius, spacing, TAP_TARGET } from '../src/theme';
 
@@ -99,7 +100,9 @@ export default function Assistant() {
       pushTurn({ role: 'you', text });
       setBusy(true);
       try {
-        const result = await runAgent(text, contacts, findContact);
+        // Prefer the server-side assistant (keeps the AI key off the device);
+        // fall back to fully on-device parsing when the server is unreachable.
+        const result = (await askServerAssistant(text)) ?? (await runAgent(text, contacts, findContact));
         pushTurn({ role: 'assistant', text: result.say });
         say(result.say);
         if (result.action.type === 'none') {
@@ -204,12 +207,14 @@ export default function Assistant() {
                 <Text style={styles.exampleText}>{ex}</Text>
               </Pressable>
             ))}
-            {!aiConfigured() && (
+            {serverEnabled() ? (
+              <Text style={styles.hint}>Connected to your Kinly server.</Text>
+            ) : !aiConfigured() ? (
               <Text style={styles.hint}>
-                Tip: add an AI key in app.json to understand more free-form requests. Works without
-                one too.
+                Tip: run the Kinly server (or add an AI key) to understand more free-form requests.
+                Works without either, too.
               </Text>
-            )}
+            ) : null}
           </View>
         )}
       </ScrollView>

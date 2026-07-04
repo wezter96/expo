@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { fetchContacts, fetchMessages, pushMessage } from './api/client';
 import { seedContacts, seedMessages } from './seed';
 import { Contact, Conversation, Message } from './types';
 
@@ -47,6 +48,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           const seeded = { contacts: seedContacts, messages: seedMessages };
           if (!cancelled) setState(seeded);
           await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+        }
+
+        // If a Kinly server is configured, hydrate from it (source of truth).
+        // Any failure leaves the local data in place — the app stays usable offline.
+        const remoteContacts = await fetchContacts();
+        if (remoteContacts && remoteContacts.length && !cancelled) {
+          const all: Message[] = [];
+          for (const c of remoteContacts) {
+            const ms = await fetchMessages(c.id);
+            if (ms) all.push(...ms);
+          }
+          if (!cancelled) setState({ contacts: remoteContacts, messages: all });
         }
       } catch {
         if (!cancelled) setState({ contacts: seedContacts, messages: seedMessages });
@@ -98,7 +111,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return msg;
   }, []);
 
-  const sendMessage = useCallback((contactId: string, text: string) => addMessage(contactId, text, true), [addMessage]);
+  const sendMessage = useCallback(
+    (contactId: string, text: string) => {
+      const msg = addMessage(contactId, text, true);
+      void pushMessage(contactId, text); // best-effort sync; no-op when offline
+      return msg;
+    },
+    [addMessage]
+  );
   const receiveMessage = useCallback((contactId: string, text: string) => addMessage(contactId, text, false), [addMessage]);
 
   const conversations = useMemo<Conversation[]>(() => {

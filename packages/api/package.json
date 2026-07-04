@@ -1,0 +1,29 @@
+{
+  "name": "@kinly/api",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {
+    "check-types": "tsc -b"
+  },
+  "dependencies": {
+    "@kinly/db": "*",
+    "@kinly/env": "*",
+    "@trpc/client": "^11.18.0",
+    "@trpc/server": "^11.18.0",
+    "drizzle-orm": "^0.45.2",
+    "dotenv": "^17.4.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@kinly/config": "*",
+    "hono": "^4.12.27",
+    "typescript": "^6"
+  }
+}

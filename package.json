@@ -1,40 +1,33 @@
 {
   "name": "kinly",
-  "version": "1.0.0",
-  "main": "expo-router/entry",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
-    "lint": "expo lint"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "check-types": "turbo run check-types",
+    "dev:native": "turbo run dev -F native",
+    "dev:server": "turbo run dev -F server",
+    "db:push": "turbo run db:push -F @kinly/db",
+    "db:studio": "turbo run db:studio -F @kinly/db",
+    "db:generate": "turbo run db:generate -F @kinly/db",
+    "db:migrate": "turbo run db:migrate -F @kinly/db",
+    "db:local": "turbo run db:local -F @kinly/db"
   },
   "dependencies": {
-    "@expo/vector-icons": "^15.0.2",
-    "@react-native-async-storage/async-storage": "2.2.0",
-    "@react-navigation/native": "^7.1.19",
-    "expo": "~54.0.8",
-    "expo-constants": "~18.0.9",
-    "expo-linking": "~8.0.8",
-    "expo-router": "~6.0.6",
-    "expo-speech": "~14.0.7",
-    "expo-splash-screen": "~31.0.10",
-    "expo-status-bar": "~3.0.8",
-    "expo-system-ui": "~6.0.7",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "react-native": "0.81.4",
-    "react-native-gesture-handler": "~2.28.0",
-    "react-native-safe-area-context": "~5.6.0",
-    "react-native-screens": "~4.18.0",
-    "react-native-web": "~0.21.0"
+    "@kinly/env": "*",
+    "dotenv": "^17.4.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/react": "~19.1.1",
-    "babel-preset-expo": "~54.0.11",
-    "typescript": "~5.9.2",
-    "eslint": "^9.25.0",
-    "eslint-config-expo": "~10.0.0"
+    "@kinly/config": "*",
+    "@types/node": "^22.13.14",
+    "turbo": "^2.10.2",
+    "typescript": "^6"
   },
-  "private": true
+  "packageManager": "npm@10.9.7"
 }
