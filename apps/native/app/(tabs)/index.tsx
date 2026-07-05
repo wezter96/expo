@@ -26,6 +26,28 @@ export default function Messages() {
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
       {!ready ? (
         <Text style={styles.muted}>Loading…</Text>
+      ) : conversations.length === 0 ? (
+        <View style={styles.emptyWrap}>
+          <Ionicons name="chatbubbles-outline" size={72} color={colors.border} />
+          <Text style={styles.emptyTitle}>No chats yet</Text>
+          <Text style={styles.emptyBody}>Add a family member or friend by their phone number to start talking.</Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/new-chat')}
+            style={({ pressed }) => [styles.emptyBtn, styles.emptyPrimary, pressed && styles.dim]}
+          >
+            <Ionicons name="person-add" size={26} color={colors.textOnDark} />
+            <Text style={styles.emptyBtnText}>Add a person</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/new-group')}
+            style={({ pressed }) => [styles.emptyBtn, styles.emptySecondary, pressed && styles.dim]}
+          >
+            <Ionicons name="people" size={26} color={colors.textOnDark} />
+            <Text style={styles.emptyBtnText}>New group</Text>
+          </Pressable>
+        </View>
       ) : (
         conversations.map(({ contact, messages }) => {
           const last = messages.length ? messages[messages.length - 1] : undefined;
@@ -79,6 +101,22 @@ export default function Messages() {
 const styles = StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.sm },
   muted: { fontSize: fonts.body, color: colors.textMuted, padding: spacing.md },
+  emptyWrap: { alignItems: 'center', gap: spacing.md, paddingTop: spacing.xl, paddingHorizontal: spacing.md },
+  emptyTitle: { fontSize: fonts.title, fontWeight: '800', color: colors.text },
+  emptyBody: { fontSize: fonts.body, color: colors.textMuted, textAlign: 'center', lineHeight: fonts.body + 8 },
+  emptyBtn: {
+    alignSelf: 'stretch',
+    minHeight: TAP_TARGET + 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+  },
+  emptyPrimary: { backgroundColor: colors.accent },
+  emptySecondary: { backgroundColor: colors.primary },
+  emptyBtnText: { fontSize: fonts.button, fontWeight: '800', color: colors.textOnDark },
+  dim: { opacity: 0.8 },
   row: {
     flexDirection: 'row',
     alignItems: 'stretch',

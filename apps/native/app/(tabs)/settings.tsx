@@ -5,6 +5,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../src/components/Avatar';
 import { serverEnabled } from '../../src/api/pocketbase';
+import { useAuth } from '../../src/auth/AuthContext';
 import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
 
 type Row = {
@@ -17,8 +18,15 @@ type Row = {
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
+  const { user, signOut } = useAuth();
   const online = serverEnabled();
   const version = Constants.expoConfig?.version ?? '1.0.0';
+
+  const confirmSignOut = () =>
+    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: signOut },
+    ]);
 
   const rows: Row[] = [
     {
@@ -60,9 +68,9 @@ export default function Settings() {
   return (
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
       <View style={styles.profile}>
-        <Avatar name="You" size={84} />
-        <Text style={styles.profileName}>You</Text>
-        <Text style={styles.profileSub}>Kinly member</Text>
+        <Avatar name={user?.name || 'You'} size={84} />
+        <Text style={styles.profileName}>{user?.name || 'You'}</Text>
+        <Text style={styles.profileSub}>{user?.phone || user?.email || 'Kinly member'}</Text>
       </View>
 
       <View style={styles.card}>
@@ -84,12 +92,36 @@ export default function Settings() {
           </Pressable>
         ))}
       </View>
+
+      {user ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+          onPress={confirmSignOut}
+          style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}
+        >
+          <Ionicons name="log-out-outline" size={28} color={colors.danger} />
+          <Text style={styles.signOutText}>Sign out</Text>
+        </Pressable>
+      ) : null}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.lg },
+  signOut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: TAP_TARGET,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+  },
+  signOutText: { fontSize: fonts.button, fontWeight: '800', color: colors.danger },
   profile: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.md },
   profileName: { fontSize: fonts.title, fontWeight: '800', color: colors.text, marginTop: spacing.sm },
   profileSub: { fontSize: fonts.body, color: colors.textMuted },

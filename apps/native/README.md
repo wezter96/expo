@@ -103,17 +103,28 @@ app/
     settings.tsx       Settings
   chat/[id].tsx        Conversation (video + call buttons in the header)
   call/[id].tsx        Video call screen
+  new-chat.tsx         Add a person by phone number
+  new-group.tsx        Create a group and pick members
 src/
   theme.ts             Design tokens tuned for older eyes/hands
-  store.tsx            Data store (local + PocketBase realtime sync)
-  seed.ts              First-run sample data
+  store.tsx            Data store (local + PocketBase realtime, re-keyed on the user)
+  seed.ts              Offline sample data
   types.ts             Data types
   time.ts              Friendly timestamps
+  auth/                AuthContext + AuthScreen (sign in / sign up, the gate)
   ai/agent.ts          On-device AI intent → action fallback
-  api/pocketbase.ts    PocketBase client (realtime + assistant + video token)
+  api/pocketbase.ts    PocketBase client (auth, realtime, people, assistant, video)
+  api/eventsource*.ts  Realtime EventSource polyfill (native only)
   video/               LiveKit call — VideoCall.native.tsx (real) + .tsx (web stub)
-  components/          Avatar, BigButton, KinlyTabBar
+  components/          Avatar, BigButton, KinlyTabBar, AddButton
 ```
+
+## Accounts
+
+When `EXPO_PUBLIC_PB_URL` is set, the app requires sign in / sign up (email +
+password, with your name + phone). Add family by phone number (`+`), create
+groups, and sign out from Settings. With no server it runs an offline demo with
+no login.
 
 ## Video calls
 

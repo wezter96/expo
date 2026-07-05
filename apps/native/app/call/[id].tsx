@@ -22,9 +22,7 @@ export default function CallScreen() {
     if (!id) return;
     let active = true;
     (async () => {
-      // A simple per-device identity; a real build would use the signed-in user.
-      const identity = `member-${Math.floor(Math.random() * 1e9).toString(36)}`;
-      const token = await fetchVideoToken(id, identity, 'You');
+      const token = await fetchVideoToken(id);
       if (!active) return;
       if (token) {
         setCreds(token);

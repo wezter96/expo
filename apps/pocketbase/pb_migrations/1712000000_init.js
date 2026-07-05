@@ -1,41 +1,73 @@
 /// <reference path="../pb_data/types.d.ts" />
 
 /**
- * Kinly schema:
- *   conversations — a person or group you can message/call
- *   messages      — a message inside a conversation (realtime-enabled)
+ * Kinly multi-user schema.
  *
- * Rules are left public ("") so the demo works out of the box. For production
- * you would gate these on membership/auth (see apps/pocketbase/README.md).
+ *   users (built-in auth) — extended with a `phone` so family can add you
+ *   conversations         — a 1:1 or group chat; `members` are its participants
+ *   messages              — a message authored by a user (realtime-enabled)
+ *
+ * Access is scoped to membership: you only see conversations you're a member
+ * of, and their messages. Server-side hooks (pb_hooks/main.pb.js) handle
+ * finding people by phone and mapping conversations to display data.
  */
 migrate(
   (app) => {
+    // --- users: add a unique phone --------------------------------------
+    const users = app.findCollectionByNameOrId('users');
+    users.fields.add(
+      new Field({
+        type: 'text',
+        name: 'phone',
+        max: 40,
+      }),
+    );
+    users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
+    app.save(users);
+
+    // --- conversations --------------------------------------------------
     const conversations = new Collection({
       type: 'base',
       name: 'conversations',
-      listRule: '',
-      viewRule: '',
-      createRule: '',
-      updateRule: '',
-      deleteRule: null,
+      // Only members can see / write; only the creator can delete.
+      listRule: '@request.auth.id != "" && members.id ?= @request.auth.id',
+      viewRule: '@request.auth.id != "" && members.id ?= @request.auth.id',
+      createRule: '@request.auth.id != "" && members.id ?= @request.auth.id',
+      updateRule: '@request.auth.id != "" && members.id ?= @request.auth.id',
+      deleteRule: '@request.auth.id != "" && createdBy.id ?= @request.auth.id',
       fields: [
-        { type: 'text', name: 'title', required: true, max: 120 },
-        { type: 'text', name: 'relation', max: 60 },
-        { type: 'text', name: 'phone', max: 40 },
+        { type: 'text', name: 'title', max: 120 },
         { type: 'bool', name: 'isGroup' },
-        { type: 'json', name: 'memberNames', maxSize: 20000 },
+        {
+          type: 'relation',
+          name: 'members',
+          required: true,
+          collectionId: users.id,
+          cascadeDelete: false,
+          minSelect: 1,
+          maxSelect: 50,
+        },
+        {
+          type: 'relation',
+          name: 'createdBy',
+          collectionId: users.id,
+          cascadeDelete: false,
+          maxSelect: 1,
+        },
         { type: 'autodate', name: 'created', onCreate: true },
         { type: 'autodate', name: 'updated', onCreate: true, onUpdate: true },
       ],
     });
     app.save(conversations);
 
+    // --- messages -------------------------------------------------------
     const messages = new Collection({
       type: 'base',
       name: 'messages',
-      listRule: '',
-      viewRule: '',
-      createRule: '',
+      listRule: '@request.auth.id != "" && conversation.members.id ?= @request.auth.id',
+      viewRule: '@request.auth.id != "" && conversation.members.id ?= @request.auth.id',
+      createRule:
+        '@request.auth.id != "" && author.id ?= @request.auth.id && conversation.members.id ?= @request.auth.id',
       updateRule: null,
       deleteRule: null,
       fields: [
@@ -48,8 +80,15 @@ migrate(
           maxSelect: 1,
           collectionId: conversations.id,
         },
+        {
+          type: 'relation',
+          name: 'author',
+          required: true,
+          cascadeDelete: false,
+          maxSelect: 1,
+          collectionId: users.id,
+        },
         { type: 'text', name: 'text', required: true, max: 2000 },
-        { type: 'bool', name: 'mine' },
         { type: 'autodate', name: 'created', onCreate: true },
       ],
       indexes: ['CREATE INDEX idx_messages_conversation ON messages (conversation, created)'],
@@ -57,13 +96,20 @@ migrate(
     app.save(messages);
   },
   (app) => {
-    // rollback (delete children first)
     for (const name of ['messages', 'conversations']) {
       try {
         app.delete(app.findCollectionByNameOrId(name));
       } catch (_) {
         // already gone
       }
+    }
+    try {
+      const users = app.findCollectionByNameOrId('users');
+      const phone = users.fields.getByName('phone');
+      if (phone) users.fields.removeByName('phone');
+      app.save(users);
+    } catch (_) {
+      // ignore
     }
   },
 );

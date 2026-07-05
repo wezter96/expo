@@ -6,85 +6,81 @@ engine**. That "all-in-one" design is what makes the $4.99 / 10-member plan
 realistic — the whole thing runs on a ~$5/month VPS.
 
 This folder holds only the parts that belong in version control — the schema
-(`pb_migrations/`) and the assistant hook (`pb_hooks/`). The binary and runtime
+(`pb_migrations/`) and the server hooks (`pb_hooks/`). The binary and runtime
 data (`pb_data/`) are git-ignored.
 
 ## Run it
 
-### Option A — download the binary (fastest)
-
-```bash
-# from https://github.com/pocketbase/pocketbase/releases (v0.27.x)
-cd apps/pocketbase
-./pocketbase serve --http=0.0.0.0:8090
-```
-
-### Option B — Docker
-
 ```bash
 cd apps/pocketbase
-docker compose up
+./pocketbase serve --http=0.0.0.0:8090      # binary from github.com/pocketbase/pocketbase/releases (v0.27.x)
+# or, from the repo root, run PocketBase + LiveKit together:  docker compose up
 ```
 
-On first start PocketBase auto-applies the migrations in `pb_migrations/`
-(creating the `conversations` and `messages` collections and seeding a sample
-family) and loads the hook in `pb_hooks/`. The admin UI is at
-`http://localhost:8090/_/`.
+On first start PocketBase auto-applies `pb_migrations/` (creating the schema)
+and loads `pb_hooks/`. Create the first admin at `http://localhost:8090/_/`.
 
 ## Point the app at it
 
 In `apps/native/.env`:
 
 ```
-EXPO_PUBLIC_PB_URL=http://localhost:8090   # use your LAN IP on a real device
+EXPO_PUBLIC_PB_URL=http://localhost:8090     # use your LAN IP on a real device
 ```
 
-Leave it unset to run the app fully offline.
+Leave it unset to run the app fully offline against on-device sample data.
 
 ## Schema
 
-**conversations** — a person or group
+**users** (built-in auth) — extended with a unique **`phone`** so family can add
+you by number. Standard `email`, `password`, `name`.
+
+**conversations** — a 1:1 or group chat
 | field | type | notes |
 | --- | --- | --- |
-| title | text | display name |
-| relation | text | "Daughter", "Friend", "Group"… |
-| phone | text | for the Call button |
+| title | text | group name (empty for 1:1) |
 | isGroup | bool | |
-| memberNames | json | group member first names |
+| members | relation→users (multi) | who's in the chat |
+| createdBy | relation→users | |
 
 **messages** — realtime-enabled
 | field | type | notes |
 | --- | --- | --- |
-| conversation | relation → conversations | cascade delete |
+| conversation | relation→conversations | cascade delete |
+| author | relation→users | who sent it |
 | text | text | |
-| mine | bool | sent by the local user |
 | created | autodate | |
 
-The app subscribes to the `messages` collection over PocketBase realtime
-(Server-Sent Events), so new messages appear live on every device.
+**Access is membership-scoped:** you can only list/read a conversation and its
+messages if you're a `member`; you can only create a message you `author`. See
+the rules in `pb_migrations/1712000000_init.js`.
 
-## Assistant endpoint
+## Hook endpoints (`pb_hooks/main.pb.js`)
 
-`POST /api/kinly/assistant` with `{ "text": "Call Mary" }` returns:
+All require a signed-in user.
 
-```json
-{ "say": "Calling Mary Johnson now. Is that right?",
-  "action": { "type": "call", "contactId": "<id>" },
-  "needsConfirm": true }
-```
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /api/kinly/find-user` `{phone}` | Look up a person by phone |
+| `POST /api/kinly/direct` `{phone}` | Start (or reuse) a 1:1 chat |
+| `GET  /api/kinly/conversations` | The caller's chats, mapped for the UI |
+| `GET  /api/kinly/contacts` | People the caller knows (for building groups) |
+| `POST /api/kinly/assistant` `{text}` | AI assistant → action (scoped to the caller) |
+| `POST /api/kinly/video-token` `{room}` | Mint a LiveKit token (secret stays server-side) |
 
-It runs a built-in rule-based parser, or Claude tool-calling when
-`ANTHROPIC_API_KEY` is set in the PocketBase environment. The key stays on the
-server. See `pb_hooks/main.pb.js`.
+Groups are created directly by the app (a `conversations` record with the
+caller in `members`), so no hook is needed.
+
+## Optional AI
+
+Set `ANTHROPIC_API_KEY` (and optionally `AI_MODEL`) in the PocketBase
+environment to have the assistant use Claude tool-calling; otherwise it uses a
+built-in rule-based parser.
 
 ## Notes for production
 
-- **Access rules** are currently public (`""`) so the demo works with no auth.
-  Before shipping, enable PocketBase auth and scope the collection list/view/
-  create rules to conversation membership.
-- **Realtime on device:** React Native has no global `EventSource`. Add a
-  polyfill (e.g. `react-native-sse`) so realtime works outside the web build;
-  the app degrades gracefully without it.
-- **`mine` flag:** this single-user demo stores whether the local user sent a
-  message. A multi-user build should replace it with an `author` relation to
-  the `users` collection and compute "mine" per viewer.
+- **Realtime on device:** the app installs a `react-native-sse` EventSource
+  polyfill so PocketBase realtime works outside the web build.
+- Add email verification / password reset (PocketBase supports both) and, for
+  stricter privacy, tighten the `find-user` lookup (e.g. rate-limit or require a
+  mutual invite).

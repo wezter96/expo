@@ -62,14 +62,24 @@ it always works:
    server is unreachable, the app even falls back to an on-device copy of the
    parser, so the feature is never dead.
 
+## Accounts, family & groups
+
+- **Sign up / sign in** (email + password) — the app is gated behind auth when a
+  server is configured. You register with your **name + phone number**.
+- **Add family by phone** — type in a relative's number to find them and start a
+  1:1 chat (`New chat`).
+- **Create groups** — name a group and pick people from your chats; every
+  conversation (1:1 or group) has the video-call button built in.
+- Access is **membership-scoped** in PocketBase: you only see your own chats.
+
 ## Real-time chat & offline-first
 
 Messages live in PocketBase and stream to every device over **PocketBase
-realtime** (Server-Sent Events), so a chat updates live. The app is also fully
-usable with **no server**: it seeds a sample family locally and persists with
-`AsyncStorage`. When `EXPO_PUBLIC_PB_URL` is set it hydrates from PocketBase,
-sends through it, subscribes for live updates, and routes the assistant
-server-side — all best-effort, with graceful fallback to local data.
+realtime** (Server-Sent Events), so a chat updates live. When
+`EXPO_PUBLIC_PB_URL` is set the app hydrates from PocketBase, sends through it,
+subscribes for live updates, and routes the assistant server-side. With **no
+server** configured it runs fully offline against a local sample family
+(`AsyncStorage`) — handy for a quick preview.
 
 ## Group video calls 📹
 
@@ -119,8 +129,8 @@ unset to run the app fully offline.
 
 ## Roadmap
 
-- Real auth + membership-scoped access rules (PocketBase auth)
-- Push notifications for new messages
+- Push notifications for new messages (Expo Push)
+- Profile photos, presence (online dots), read receipts
 - Photo & voice-note sharing (PocketBase file storage)
 - On-device speech-to-text for true hands-free use
 

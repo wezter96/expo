@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { fetchContacts, fetchMessages, pushMessage, subscribeMessages } from './api/pocketbase';
+import { fetchContacts, fetchMessages, pushMessage, serverEnabled, subscribeMessages } from './api/pocketbase';
+import { useAuth } from './auth/AuthContext';
 import { seedContacts, seedMessages } from './seed';
 import { Contact, Conversation, Message } from './types';
 
@@ -21,6 +22,8 @@ type Store = {
   sendMessage: (contactId: string, text: string) => Message;
   /** Simulate an incoming reply (used to make the demo feel alive). */
   receiveMessage: (contactId: string, text: string) => Message;
+  /** Re-pull conversations & messages from the server (after adding a person/group). */
+  refresh: () => Promise<void>;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -32,37 +35,55 @@ function nextId(prefix: string): string {
 }
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const uid = user?.id ?? null;
+  const online = serverEnabled();
+
   const [state, setState] = useState<State>({ contacts: [], messages: [] });
   const [ready, setReady] = useState(false);
 
-  // Load persisted state (or seed on first run).
+  // Pull the full picture from the server (contacts + their messages).
+  const hydrateFromServer = useCallback(async (): Promise<boolean> => {
+    const remoteContacts = await fetchContacts();
+    if (!remoteContacts) return false;
+    const all: Message[] = [];
+    for (const c of remoteContacts) {
+      const ms = await fetchMessages(c.id);
+      if (ms) all.push(...ms);
+    }
+    setState({ contacts: remoteContacts, messages: all });
+    return true;
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (online && uid) await hydrateFromServer();
+  }, [online, uid, hydrateFromServer]);
+
+  // Load data. Re-runs when the signed-in user changes (login / logout).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as State;
-          if (!cancelled) setState(parsed);
-        } else {
-          const seeded = { contacts: seedContacts, messages: seedMessages };
-          if (!cancelled) setState(seeded);
-          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
-        }
-
-        // If a Kinly server is configured, hydrate from it (source of truth).
-        // Any failure leaves the local data in place — the app stays usable offline.
-        const remoteContacts = await fetchContacts();
-        if (remoteContacts && remoteContacts.length && !cancelled) {
-          const all: Message[] = [];
-          for (const c of remoteContacts) {
-            const ms = await fetchMessages(c.id);
-            if (ms) all.push(...ms);
+        if (online) {
+          // Real backend: the server is the source of truth (no local demo data).
+          if (uid) {
+            await hydrateFromServer();
+          } else if (!cancelled) {
+            setState({ contacts: [], messages: [] });
           }
-          if (!cancelled) setState({ contacts: remoteContacts, messages: all });
+        } else {
+          // Offline demo: local sample data, persisted on the device.
+          const raw = await AsyncStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            if (!cancelled) setState(JSON.parse(raw) as State);
+          } else {
+            const seeded = { contacts: seedContacts, messages: seedMessages };
+            if (!cancelled) setState(seeded);
+            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+          }
         }
       } catch {
-        if (!cancelled) setState({ contacts: seedContacts, messages: seedMessages });
+        if (!cancelled && !online) setState({ contacts: seedContacts, messages: seedMessages });
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -70,18 +91,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [online, uid, hydrateFromServer]);
 
-  // Persist on every change (after initial load).
+  // Persist offline demo data on every change.
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || online) return;
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
-  }, [state, ready]);
+  }, [state, ready, online]);
 
-  // Live updates: when a server is configured, new messages stream in over
-  // PocketBase realtime and are merged in (deduped by id).
+  // Live updates: when signed in, new messages stream in over PocketBase
+  // realtime and are merged in (deduped by id).
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !online || !uid) return;
     let unsub = () => {};
     let active = true;
     subscribeMessages((msg) => {
@@ -99,7 +120,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       active = false;
       unsub();
     };
-  }, [ready]);
+  }, [ready, online, uid]);
 
   const getContact = useCallback(
     (id: string) => state.contacts.find((c) => c.id === id),
@@ -165,6 +186,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     messagesFor,
     sendMessage,
     receiveMessage,
+    refresh,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

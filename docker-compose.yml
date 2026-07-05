@@ -1,0 +1,42 @@
+# Run the whole Kinly backend (PocketBase + LiveKit) with one command:
+#   docker compose up
+#
+# Then point the app at it in apps/native/.env:
+#   EXPO_PUBLIC_PB_URL=http://<YOUR_LAN_IP>:8090
+services:
+  pocketbase:
+    image: ghcr.io/muchobien/pocketbase:0.27.0
+    container_name: kinly-pocketbase
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      # Video (must match apps/livekit/livekit.yaml). CHANGE the secret.
+      # LIVEKIT_URL must be reachable from the phone, so use your LAN IP:
+      LIVEKIT_URL: "ws://CHANGE_ME_LAN_IP:7880"
+      LIVEKIT_API_KEY: "devkey"
+      LIVEKIT_API_SECRET: "devsecret_change_me_to_a_32char_min_secret"
+      # Optional Claude-powered assistant:
+      # ANTHROPIC_API_KEY: "sk-ant-..."
+      # AI_MODEL: "claude-haiku-4-5-20251001"
+    volumes:
+      - ./apps/pocketbase/pb_migrations:/pb/pb_migrations
+      - ./apps/pocketbase/pb_hooks:/pb/pb_hooks
+      - pb_data:/pb/pb_data
+    command:
+      - serve
+      - --http=0.0.0.0:8090
+
+  livekit:
+    image: livekit/livekit-server:v1.8
+    container_name: kinly-livekit
+    restart: unless-stopped
+    network_mode: host # needed for WebRTC media
+    volumes:
+      - ./apps/livekit/livekit.yaml:/etc/livekit.yaml
+    command:
+      - --config
+      - /etc/livekit.yaml
+
+volumes:
+  pb_data:
