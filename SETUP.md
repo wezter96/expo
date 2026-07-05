@@ -48,7 +48,9 @@ error, fix it here before continuing** (see gotchas).
 
 1. Open `http://localhost:8090/_/` and create the **admin** account.
 2. Confirm the collections exist: `conversations`, `messages`, `reactions`,
-   `reads`, `calls`, and `users` (with `phone`, `pushToken`, `lastSeen`).
+   `reads`, `calls`, `reports`, and `users` (with `phone`, `pushToken`,
+   `lastSeen`, `blocked`). The `reports` collection is admin-only — safety
+   reports filed from the app land here for you to review.
 3. **Email** (needed for password reset / verification): Settings → Mail
    settings → configure SMTP (e.g. a Gmail app password or a transactional
    provider). Without this, "Forgot password" silently does nothing.
@@ -130,10 +132,17 @@ Install on **two phones** (or a phone + a simulator).
 - On device, realtime uses the `react-native-sse` EventSource polyfill (already
   wired). On web it uses the browser's EventSource.
 
+**Safety (block / report / unsend).** From a 1:1 chat's ⋮ menu you can **block**
+a person (either side blocked → messages and 1:1 start are refused server-side,
+enforced in `pb_hooks` and the `direct` route) or **report** them (writes to the
+admin-only `reports` collection). Long-press your own message to **unsend** it
+(`messages.deleteRule` = author; the delete streams to everyone over realtime).
+
 **Known deferrals** (documented, not bugs): typing indicators (PocketBase has no
 ephemeral channel), fully-backgrounded CallKit-style ringing, and contacts-only
-message gating (currently anyone who knows your number + is on Kinly can start a
-1:1 — add a request/accept flow for stricter privacy).
+message gating (anyone who knows your number + is on Kinly can start a 1:1 unless
+you block them — a request/accept flow would make this opt-in rather than
+opt-out).
 
 **Reminder:** SOS is a convenience shortcut to a chosen contact — it is **not a
 replacement for emergency services (911/112)**. Say so in-product if you ship.

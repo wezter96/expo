@@ -1,14 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  blockUser,
+  deleteMessage as deleteMessageRemote,
   fetchContacts,
   fetchMessages,
+  isBlocked as isBlockedRemote,
   newId,
   pushMessage,
   pushPhoto,
   pushVoice,
+  reportUser,
   serverEnabled,
   subscribeMessages,
+  unblockUser,
 } from './api/pocketbase';
 import { useAuth } from './auth/AuthContext';
 import { seedContacts, seedMessages } from './seed';
@@ -36,6 +41,8 @@ type Store = {
   sendVoice: (contactId: string, uri: string, duration: number) => void;
   /** Retry a message that failed to send. */
   retryMessage: (id: string) => void;
+  /** Delete (unsend) one of my own messages for everyone. */
+  deleteMessage: (id: string) => void;
   /** Simulate an incoming reply (used to make the demo feel alive). */
   receiveMessage: (contactId: string, text: string) => Message;
   /** Re-pull conversations & messages from the server (after adding a person/group). */
@@ -52,6 +59,11 @@ type Store = {
   /** Pinned favorites (shown first). */
   isFavorite: (contactId: string) => boolean;
   toggleFavorite: (contactId: string) => void;
+  /** Safety: block / unblock / report a person (by their user id). */
+  isBlocked: (userId: string) => boolean;
+  blockContact: (userId: string) => Promise<void>;
+  unblockContact: (userId: string) => Promise<void>;
+  reportContact: (input: { reportedUserId: string; conversationId?: string; reason?: string }) => Promise<boolean>;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -181,14 +193,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!ready || !online || !uid) return;
     let unsub = () => {};
     let active = true;
-    subscribeMessages((msg) => {
-      setState((s) => {
-        if (s.messages.some((m) => m.id === msg.id)) {
-          return { ...s, messages: s.messages.map((m) => (m.id === msg.id ? msg : m)) };
-        }
-        return { ...s, messages: [...s.messages, msg] };
-      });
-    }).then((fn) => {
+    subscribeMessages(
+      (msg) => {
+        setState((s) => {
+          if (s.messages.some((m) => m.id === msg.id)) {
+            return { ...s, messages: s.messages.map((m) => (m.id === msg.id ? msg : m)) };
+          }
+          return { ...s, messages: [...s.messages, msg] };
+        });
+      },
+      (deletedId) => {
+        setState((s) => ({ ...s, messages: s.messages.filter((m) => m.id !== deletedId) }));
+      }
+    ).then((fn) => {
       if (active) unsub = fn;
       else fn();
     });
@@ -312,6 +329,44 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [online, uid, setMessageStatus]
   );
 
+  // Unsend: remove locally right away, then delete on the server. If the
+  // server delete fails, re-pull so the message reappears.
+  const deleteMessage = useCallback(
+    (id: string) => {
+      setState((s) => ({ ...s, messages: s.messages.filter((m) => m.id !== id) }));
+      if (online && uid) {
+        deleteMessageRemote(id).then((ok) => {
+          if (!ok) void hydrateFromServer();
+        });
+      }
+    },
+    [online, uid, hydrateFromServer]
+  );
+
+  const isBlocked = useCallback((userId: string) => (online ? isBlockedRemote(userId) : false), [online]);
+
+  const [, forceTick] = useState(0);
+  const blockContact = useCallback(
+    async (userId: string) => {
+      await blockUser(userId);
+      forceTick((n) => n + 1); // reflect the new blocked state
+      await refresh();
+    },
+    [refresh]
+  );
+  const unblockContact = useCallback(
+    async (userId: string) => {
+      await unblockUser(userId);
+      forceTick((n) => n + 1);
+      await refresh();
+    },
+    [refresh]
+  );
+  const reportContact = useCallback(
+    (input: { reportedUserId: string; conversationId?: string; reason?: string }) => reportUser(input),
+    []
+  );
+
   const receiveMessage = useCallback(
     (contactId: string, text: string) => addLocal(contactId, { text, kind: 'text', mine: false }),
     [addLocal]
@@ -358,6 +413,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     sendPhoto,
     sendVoice,
     retryMessage,
+    deleteMessage,
     receiveMessage,
     refresh,
     unreadCount,
@@ -367,6 +423,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setEmergency,
     isFavorite,
     toggleFavorite,
+    isBlocked,
+    blockContact,
+    unblockContact,
+    reportContact,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

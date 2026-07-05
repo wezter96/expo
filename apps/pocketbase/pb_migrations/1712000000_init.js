@@ -18,6 +18,10 @@ migrate(
     users.fields.add(new Field({ type: 'text', name: 'phone', max: 40 }));
     users.fields.add(new Field({ type: 'text', name: 'pushToken', max: 300 }));
     users.fields.add(new Field({ type: 'date', name: 'lastSeen' }));
+    // People this user has blocked (they can't start chats or message each other).
+    users.fields.add(
+      new Field({ type: 'relation', name: 'blocked', collectionId: users.id, cascadeDelete: false, maxSelect: 200 }),
+    );
     users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
     // Any signed-in user can view a user record (needed to show names & photos
     // of the people you chat with). You can only change your own record.
@@ -69,7 +73,8 @@ migrate(
       createRule:
         '@request.auth.id != "" && author.id ?= @request.auth.id && conversation.members.id ?= @request.auth.id',
       updateRule: null,
-      deleteRule: null,
+      // The author can delete (unsend) their own message.
+      deleteRule: '@request.auth.id != "" && author.id ?= @request.auth.id',
       fields: [
         {
           type: 'relation',
@@ -161,9 +166,30 @@ migrate(
       indexes: ['CREATE INDEX idx_calls_conversation ON calls (conversation, created)'],
     });
     app.save(calls);
+
+    // --- reports (safety: report a person to the admins) ----------------
+    const reports = new Collection({
+      type: 'base',
+      name: 'reports',
+      // Private to the admins — a reporter can file one but nobody reads them in-app.
+      listRule: null,
+      viewRule: null,
+      createRule: '@request.auth.id != "" && reporter.id ?= @request.auth.id',
+      updateRule: null,
+      deleteRule: null,
+      fields: [
+        { type: 'relation', name: 'reporter', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        { type: 'relation', name: 'reportedUser', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        { type: 'relation', name: 'conversation', cascadeDelete: true, maxSelect: 1, collectionId: conversations.id },
+        { type: 'text', name: 'reason', max: 1000 },
+        { type: 'autodate', name: 'created', onCreate: true },
+      ],
+      indexes: ['CREATE INDEX idx_reports_reported ON reports (reportedUser, created)'],
+    });
+    app.save(reports);
   },
   (app) => {
-    for (const name of ['calls', 'reactions', 'reads', 'messages', 'conversations']) {
+    for (const name of ['reports', 'calls', 'reactions', 'reads', 'messages', 'conversations']) {
       try {
         app.delete(app.findCollectionByNameOrId(name));
       } catch (_) {
@@ -172,8 +198,9 @@ migrate(
     }
     try {
       const users = app.findCollectionByNameOrId('users');
-      const phone = users.fields.getByName('phone');
-      if (phone) users.fields.removeByName('phone');
+      for (const f of ['phone', 'pushToken', 'lastSeen', 'blocked']) {
+        if (users.fields.getByName(f)) users.fields.removeByName(f);
+      }
       app.save(users);
     } catch (_) {
       // ignore

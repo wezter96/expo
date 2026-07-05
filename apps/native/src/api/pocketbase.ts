@@ -287,6 +287,68 @@ export async function pushVoice(id: string, contactId: string, uri: string, dura
   }
 }
 
+/** Delete (unsend) a message. Only the author may; realtime removes it for everyone. */
+export async function deleteMessage(id: string): Promise<boolean> {
+  if (!pb || !pb.authStore.isValid) return false;
+  try {
+    await pb.collection('messages').delete(id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// --- blocking & reporting (safety) ----------------------------------------
+
+/** The ids the signed-in user has blocked. */
+export function blockedIds(): string[] {
+  const r = pb?.authStore.record;
+  const list = r?.blocked;
+  return Array.isArray(list) ? (list as string[]) : [];
+}
+
+export function isBlocked(userId: string): boolean {
+  return blockedIds().includes(userId);
+}
+
+/** Block or unblock a person. Persists on the current user's record. */
+async function setBlocked(userId: string, blocked: boolean): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  const me = pb.authStore.record.id;
+  const next = blocked
+    ? Array.from(new Set([...blockedIds(), userId]))
+    : blockedIds().filter((x) => x !== userId);
+  await pb.collection('users').update(me, { blocked: next });
+  await pb.collection('users').authRefresh();
+}
+
+export function blockUser(userId: string): Promise<void> {
+  return setBlocked(userId, true);
+}
+export function unblockUser(userId: string): Promise<void> {
+  return setBlocked(userId, false);
+}
+
+/** File a report about a person (goes to the admins, not visible in-app). */
+export async function reportUser(input: {
+  reportedUserId: string;
+  conversationId?: string;
+  reason?: string;
+}): Promise<boolean> {
+  if (!pb || !pb.authStore.record) return false;
+  try {
+    await pb.collection('reports').create({
+      reporter: pb.authStore.record.id,
+      reportedUser: input.reportedUserId,
+      conversation: input.conversationId,
+      reason: (input.reason ?? '').slice(0, 1000),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // --- password reset -------------------------------------------------------
 
 /** Send a password-reset email (requires SMTP configured in PocketBase). */
@@ -295,13 +357,17 @@ export async function requestPasswordReset(email: string): Promise<void> {
   await pb.collection('users').requestPasswordReset(email.trim());
 }
 
-/** Subscribe to new/changed messages in the user's conversations. */
-export async function subscribeMessages(onChange: (message: Message) => void): Promise<() => void> {
+/** Subscribe to new/changed/deleted messages in the user's conversations. */
+export async function subscribeMessages(
+  onChange: (message: Message) => void,
+  onDelete?: (id: string) => void
+): Promise<() => void> {
   if (!pb || !pb.authStore.isValid || typeof globalThis.EventSource === 'undefined') return () => {};
   const meId = currentUserId();
   try {
     await pb.collection('messages').subscribe('*', (e) => {
       if (e.action === 'create' || e.action === 'update') onChange(toMessage(e.record, meId));
+      else if (e.action === 'delete') onDelete?.(e.record.id);
     });
     return () => {
       pb.collection('messages').unsubscribe('*').catch(() => {});

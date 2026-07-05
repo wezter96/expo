@@ -1,10 +1,10 @@
 /**
- * Kinly design tokens.
+ * Kinly design tokens — the "Serene Connect" system.
  *
- * Tuned for older eyes and hands: large type, high contrast, big touch targets.
- * Colors and font sizes are theme-aware (light/dark + adjustable text size) via
- * ThemeProvider / useTheme (see theme-context.tsx). The static `colors`/`fonts`
- * exports below are the light-mode defaults (used as a fallback).
+ * Personality: reliability, warmth, clarity, tuned for intergenerational use.
+ * Deep Trust Blue primary on Warm Cloud White, high-contrast text, generous
+ * spacing, and the Atkinson Hyperlegible typeface (designed for low vision).
+ * See DESIGN.md. Colors/fonts are theme-aware via ThemeProvider / useTheme.
  */
 
 export type Colors = {
@@ -23,35 +23,37 @@ export type Colors = {
   border: string;
 };
 
+// Light — Serene Connect
 export const lightColors: Colors = {
-  primary: '#0B5FA5',
-  primaryDark: '#08477C',
-  accent: '#2E9E5B',
-  background: '#F4F6F9',
-  card: '#FFFFFF',
-  bubbleMine: '#0B5FA5',
-  bubbleTheirs: '#E6EBF1',
-  text: '#12203A',
+  primary: '#1A4B84', // Deep Trust Blue
+  primaryDark: '#003466',
+  accent: '#059669', // emerald — confirm / accept / send
+  background: '#F8F9FA', // Warm Cloud White (surface)
+  card: '#FFFFFF', // surface-container-lowest
+  bubbleMine: '#1A4B84',
+  bubbleTheirs: '#E8F0F8', // soft blue tint (secondary)
+  text: '#191C1D', // on-surface
   textOnDark: '#FFFFFF',
-  textMuted: '#5A6B85',
-  danger: '#C0392B',
-  warning: '#B8860B',
-  border: '#D3DAE3',
+  textMuted: '#424750', // on-surface-variant
+  danger: '#BA1A1A', // error
+  warning: '#D97706', // warm amber accent
+  border: '#C3C6D1', // outline-variant
 };
 
+// Dark — derived to keep the same hues with calm, low-glare surfaces
 export const darkColors: Colors = {
-  primary: '#2B84D8',
+  primary: '#5A9BE8',
   primaryDark: '#0B3C66',
-  accent: '#37B26A',
-  background: '#0E1621',
-  card: '#1A2634',
-  bubbleMine: '#1E5C93',
-  bubbleTheirs: '#22303F',
-  text: '#F1F5FA',
+  accent: '#2FB673',
+  background: '#0F1620',
+  card: '#1A2430',
+  bubbleMine: '#1E4E86',
+  bubbleTheirs: '#233140',
+  text: '#EDEEF0',
   textOnDark: '#FFFFFF',
-  textMuted: '#9FB0C4',
-  danger: '#E05B4B',
-  warning: '#E0A93B',
+  textMuted: '#A9B6C6',
+  danger: '#E0655A',
+  warning: '#E0A040',
   border: '#33455A',
 };
 
@@ -64,7 +66,14 @@ export type Fonts = {
   small: number;
 };
 
-const BASE_FONTS: Fonts = { huge: 40, title: 30, heading: 24, body: 20, button: 24, small: 17 };
+// Oversized type scale (base body 20 for easy reading without zooming).
+const BASE_FONTS: Fonts = { huge: 34, title: 28, heading: 24, body: 20, button: 22, small: 16 };
+
+/** Global typeface (Atkinson Hyperlegible), loaded in the root layout. */
+export const fontFamily = {
+  regular: 'AtkinsonHyperlegible_400Regular',
+  bold: 'AtkinsonHyperlegible_700Bold',
+};
 
 /** Text size options. */
 export type TextSize = 'normal' | 'large' | 'xlarge';
@@ -81,25 +90,26 @@ export function scaledFonts(scale: number): Fonts {
   };
 }
 
-// Light-mode defaults (fallback for any code path outside a ThemeProvider).
+// Light-mode defaults (fallback outside a ThemeProvider).
 export const colors = lightColors;
 export const fonts = BASE_FONTS;
 
-export const spacing = { xs: 6, sm: 12, md: 18, lg: 26, xl: 36 };
-export const radius = { sm: 12, md: 18, lg: 26, pill: 999 };
+// 8px baseline grid; 24px container padding; large gaps between sections.
+export const spacing = { xs: 8, sm: 12, md: 16, lg: 24, xl: 40 };
+export const radius = { sm: 8, md: 12, lg: 16, pill: 9999 };
 
-/** Minimum height for anything the user must tap. */
+/** Minimum height for anything the user must tap (spec floor is 56). */
 export const TAP_TARGET = 64;
 
 export const avatarColors = [
-  '#0B5FA5',
-  '#2E9E5B',
-  '#B8860B',
+  '#1A4B84',
+  '#059669',
+  '#D97706',
   '#7D3C98',
-  '#C0392B',
-  '#16A085',
-  '#D35400',
-  '#2C3E50',
+  '#BA1A1A',
+  '#0E7490',
+  '#B45309',
+  '#334155',
 ];
 
 export function colorForName(name: string): string {

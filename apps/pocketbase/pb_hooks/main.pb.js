@@ -49,6 +49,19 @@ function callerConversations(meId) {
   return $app.findRecordsByFilter('conversations', 'members.id ?= {:uid}', '-updated', 200, 0, { uid: meId });
 }
 
+/** True if either user has blocked the other. */
+function blockedPair(aId, bId) {
+  try {
+    const a = $app.findRecordById('users', aId);
+    if ((a.get('blocked') || []).indexOf(bId) !== -1) return true;
+  } catch (_) {}
+  try {
+    const b = $app.findRecordById('users', bId);
+    if ((b.get('blocked') || []).indexOf(aId) !== -1) return true;
+  } catch (_) {}
+  return false;
+}
+
 // ===========================================================================
 // People
 // ===========================================================================
@@ -82,6 +95,9 @@ routerAdd('POST', '/api/kinly/direct', (e) => {
     return e.json(404, { error: 'No one with that phone number has joined Kinly yet.' });
   }
   if (other.id === auth.id) return e.json(400, { error: 'That is your own number.' });
+  if (blockedPair(auth.id, other.id)) {
+    return e.json(403, { error: 'This conversation is not available. You may have blocked this person, or they blocked you.' });
+  }
 
   // Reuse an existing 1:1 if there is one.
   const existing = $app.findRecordsByFilter(
@@ -294,6 +310,31 @@ routerAdd('POST', '/api/kinly/video-token', (e) => {
   const token = $security.createJWT(payload, apiSecret, 60 * 60 * 4);
   return e.json(200, { token: token, url: url });
 });
+
+// ===========================================================================
+// Safety — refuse to create a 1:1 message when either party has blocked the
+// other. (Groups aren't gated; leave/remove is the group-level control.)
+// ===========================================================================
+
+onRecordCreateRequest((e) => {
+  try {
+    const msg = e.record;
+    const conv = $app.findRecordById('conversations', msg.getString('conversation'));
+    if (!conv.getBool('isGroup')) {
+      const authorId = msg.getString('author');
+      const memberIds = conv.get('members') || [];
+      for (const id of memberIds) {
+        if (id !== authorId && blockedPair(authorId, id)) {
+          throw new BadRequestError('This conversation is not available.');
+        }
+      }
+    }
+  } catch (err) {
+    if (err instanceof BadRequestError) throw err;
+    // Any lookup failure: fall through and let normal rules decide.
+  }
+  e.next();
+}, 'messages');
 
 // ===========================================================================
 // Push notifications — when a message is created, notify the other members

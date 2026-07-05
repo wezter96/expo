@@ -47,8 +47,22 @@ export default function Chat() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { getContact, messagesFor, sendMessage, sendPhoto, sendVoice, retryMessage, markRead, isFavorite, toggleFavorite } =
-    useStore();
+  const {
+    getContact,
+    messagesFor,
+    sendMessage,
+    sendPhoto,
+    sendVoice,
+    retryMessage,
+    deleteMessage,
+    markRead,
+    isFavorite,
+    toggleFavorite,
+    isBlocked,
+    blockContact,
+    unblockContact,
+    reportContact,
+  } = useStore();
   const [draft, setDraft] = useState('');
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -211,6 +225,63 @@ export default function Chat() {
     Speech.speak(text, { rate: 0.95 });
   }
 
+  function promptDelete(messageId: string) {
+    Alert.alert('Delete message', 'Remove this message for everyone?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteMessage(messageId) },
+    ]);
+  }
+
+  function confirmBlock(userId: string, name: string) {
+    Alert.alert(
+      `Block ${name}?`,
+      `${name} won't be able to message or call you, and you won't be able to message them until you unblock.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: () => {
+            void blockContact(userId);
+            router.back();
+          },
+        },
+      ]
+    );
+  }
+
+  function confirmReport(userId: string, name: string) {
+    Alert.alert(
+      `Report ${name}?`,
+      'This sends a report to the Kinly team. You can also block this person to stop hearing from them.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report',
+          style: 'destructive',
+          onPress: async () => {
+            const ok = await reportContact({ reportedUserId: userId, conversationId: contact!.id });
+            Alert.alert(ok ? 'Thank you' : 'Could not send report', ok ? 'Your report has been sent.' : 'Please try again later.');
+          },
+        },
+      ]
+    );
+  }
+
+  function moreMenu() {
+    if (!other) return;
+    const blocked = isBlocked(other.id);
+    Alert.alert(contact!.name, undefined, [
+      blocked
+        ? { text: `Unblock ${contact!.name}`, onPress: () => void unblockContact(other.id) }
+        : { text: `Block ${contact!.name}`, style: 'destructive', onPress: () => confirmBlock(other.id, contact!.name) },
+      { text: 'Report to Kinly', onPress: () => confirmReport(other.id, contact!.name) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  const blocked = !!other && online && isBlocked(other.id);
+
   return (
     <KeyboardAvoidingView
       style={styles.flex}
@@ -262,7 +333,11 @@ export default function Chat() {
                 >
                   <Ionicons name="people" size={28} color={colors.textOnDark} />
                 </Pressable>
-              ) : null}
+              ) : (
+                <Pressable accessibilityLabel="More options" onPress={moreMenu} hitSlop={12}>
+                  <Ionicons name="ellipsis-vertical" size={26} color={colors.textOnDark} />
+                </Pressable>
+              )}
             </View>
           ),
         }}
@@ -284,7 +359,9 @@ export default function Chat() {
             }
             reactions={groupReactions(reactions.filter((r) => r.messageId === item.id), meId)}
             canReact={online}
-            onLongPress={() => (online ? setReactingTo(item.id) : speak(item.text))}
+            onLongPress={() =>
+              item.mine ? promptDelete(item.id) : online ? setReactingTo(item.id) : speak(item.text)
+            }
             onReact={online ? () => setReactingTo(item.id) : undefined}
             onTapReaction={(emoji) => online && toggleReaction(item.id, emoji)}
             onRetry={() => retryMessage(item.id)}
@@ -327,6 +404,18 @@ export default function Chat() {
         </Pressable>
       </Modal>
 
+      {blocked ? (
+        <View style={[styles.blockedBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+          <Text style={styles.blockedText}>You blocked {contact.name}.</Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => other && unblockContact(other.id)}
+            style={({ pressed }) => [styles.unblockBtn, pressed && styles.pressed]}
+          >
+            <Text style={styles.unblockText}>Unblock</Text>
+          </Pressable>
+        </View>
+      ) : (
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
         {recording ? (
           <>
@@ -390,6 +479,7 @@ export default function Chat() {
           </>
         )}
       </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -602,6 +692,27 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     borderTopColor: colors.border,
     backgroundColor: colors.card,
   },
+  blockedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: 2,
+    borderTopColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  blockedText: { flex: 1, fontSize: fonts.body, color: colors.textMuted, fontWeight: '700' },
+  unblockBtn: {
+    minHeight: TAP_TARGET - 8,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unblockText: { fontSize: fonts.button, fontWeight: '800', color: colors.textOnDark },
   input: {
     flex: 1,
     minHeight: TAP_TARGET,
