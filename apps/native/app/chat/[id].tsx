@@ -3,10 +3,8 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Speech from 'expo-speech';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   FlatList,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -57,14 +55,6 @@ export default function Chat() {
     Speech.speak(text, { rate: 0.95 });
   }
 
-  function call() {
-    if (!contact!.phone) {
-      Alert.alert('No phone number', `There is no phone number saved for ${contact!.name}.`);
-      return;
-    }
-    Linking.openURL(`tel:${contact!.phone}`).catch(() => Alert.alert('Could not start call'));
-  }
-
   return (
     <KeyboardAvoidingView
       style={styles.flex}
@@ -77,17 +67,19 @@ export default function Chat() {
           headerRight: () => (
             <View style={styles.headerActions}>
               <Pressable
+                accessibilityLabel={`Voice call ${contact.name}`}
+                onPress={() => router.push(`/call/${contact.id}?mode=voice`)}
+                hitSlop={12}
+              >
+                <Ionicons name="call" size={28} color={colors.textOnDark} />
+              </Pressable>
+              <Pressable
                 accessibilityLabel={`Video call ${contact.name}`}
                 onPress={() => router.push(`/call/${contact.id}`)}
                 hitSlop={12}
               >
                 <Ionicons name="videocam" size={30} color={colors.textOnDark} />
               </Pressable>
-              {!contact.isGroup && (
-                <Pressable accessibilityLabel={`Call ${contact.name}`} onPress={call} hitSlop={12}>
-                  <Ionicons name="call" size={28} color={colors.textOnDark} />
-                </Pressable>
-              )}
             </View>
           ),
         }}

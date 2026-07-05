@@ -20,7 +20,7 @@ import type { VideoCallProps } from './types';
 registerGlobals();
 
 /** Native (iOS/Android) group video call powered by a self-hosted LiveKit SFU. */
-export function VideoCall({ token, url, name, onLeave }: VideoCallProps) {
+export function VideoCall({ token, url, name, startVideo, onLeave }: VideoCallProps) {
   useEffect(() => {
     let active = true;
     (async () => {
@@ -33,7 +33,7 @@ export function VideoCall({ token, url, name, onLeave }: VideoCallProps) {
   }, []);
 
   return (
-    <LiveKitRoom serverUrl={url} token={token} connect audio video onDisconnected={onLeave}>
+    <LiveKitRoom serverUrl={url} token={token} connect audio video={startVideo} onDisconnected={onLeave}>
       <RoomView name={name} onLeave={onLeave} />
     </LiveKitRoom>
   );

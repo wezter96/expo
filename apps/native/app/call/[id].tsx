@@ -10,10 +10,12 @@ import { colors, fonts, radius, spacing } from '../../src/theme';
 type Phase = 'loading' | 'ready' | 'unavailable';
 
 export default function CallScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>();
   const router = useRouter();
   const { getContact } = useStore();
 
+  const startVideo = mode !== 'voice';
+  const kind = startVideo ? 'video' : 'voice';
   const contact = id ? getContact(id) : undefined;
   const [phase, setPhase] = useState<Phase>('loading');
   const [creds, setCreds] = useState<VideoToken | null>(null);
@@ -42,7 +44,13 @@ export default function CallScreen() {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
-        <VideoCall token={creds.token} url={creds.url} name={contact?.name ?? 'Video call'} onLeave={leave} />
+        <VideoCall
+          token={creds.token}
+          url={creds.url}
+          name={contact?.name ?? 'Call'}
+          startVideo={startVideo}
+          onLeave={leave}
+        />
       </>
     );
   }
@@ -53,7 +61,7 @@ export default function CallScreen() {
       {phase === 'loading' ? (
         <>
           <ActivityIndicator size="large" color={colors.textOnDark} />
-          <Text style={styles.text}>Connecting your video call…</Text>
+          <Text style={styles.text}>Connecting your {kind} call…</Text>
         </>
       ) : (
         <>

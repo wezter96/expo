@@ -6,6 +6,8 @@ export type VideoCallProps = {
   url: string;
   /** Who/what we're calling — shown in the UI. */
   name: string;
+  /** Start with the camera on (video call) or off (voice call). */
+  startVideo: boolean;
   /** Called when the user leaves or the room disconnects. */
   onLeave: () => void;
 };
