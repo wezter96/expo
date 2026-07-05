@@ -16,6 +16,7 @@ import { Contact, Conversation, Message } from './types';
 const STORAGE_KEY = 'kinly.state.v1';
 const READS_KEY = 'kinly.reads.v1';
 const SOS_KEY = 'kinly.sos.v1';
+const FAV_KEY = 'kinly.favorites.v1';
 
 type State = {
   contacts: Contact[];
@@ -45,6 +46,9 @@ type Store = {
   /** The designated emergency (SOS) contact id, if any. */
   emergencyId: string | null;
   setEmergency: (contactId: string | null) => void;
+  /** Pinned favorites (shown first). */
+  isFavorite: (contactId: string) => boolean;
+  toggleFavorite: (contactId: string) => void;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -90,6 +94,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setEmergencyIdState(contactId);
     if (contactId) AsyncStorage.setItem(SOS_KEY, contactId).catch(() => {});
     else AsyncStorage.removeItem(SOS_KEY).catch(() => {});
+  }, []);
+
+  // Favorites (pinned to the top of Messages).
+  const [favorites, setFavorites] = useState<string[]>([]);
+  useEffect(() => {
+    AsyncStorage.getItem(FAV_KEY)
+      .then((v) => v && setFavorites(JSON.parse(v)))
+      .catch(() => {});
+  }, []);
+  const isFavorite = useCallback((contactId: string) => favorites.includes(contactId), [favorites]);
+  const toggleFavorite = useCallback((contactId: string) => {
+    setFavorites((f) => {
+      const next = f.includes(contactId) ? f.filter((x) => x !== contactId) : [...f, contactId];
+      AsyncStorage.setItem(FAV_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
   }, []);
 
   // Pull the full picture from the server (contacts + their messages).
@@ -265,8 +285,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const lastAt = messages.length ? messages[messages.length - 1].at : 0;
         return { contact, messages, lastAt };
       })
-      .sort((a, b) => b.lastAt - a.lastAt);
-  }, [state.contacts, state.messages]);
+      .sort((a, b) => {
+        const fa = favorites.includes(a.contact.id) ? 1 : 0;
+        const fb = favorites.includes(b.contact.id) ? 1 : 0;
+        if (fa !== fb) return fb - fa; // favorites first
+        return b.lastAt - a.lastAt;
+      });
+  }, [state.contacts, state.messages, favorites]);
 
   const totalUnread = useMemo(
     () => state.contacts.reduce((sum, c) => sum + unreadCount(c.id), 0),
@@ -290,6 +315,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     markRead,
     emergencyId,
     setEmergency,
+    isFavorite,
+    toggleFavorite,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

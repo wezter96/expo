@@ -236,6 +236,15 @@ export default function Chat() {
               >
                 <Ionicons name="videocam" size={30} color={colors.textOnDark} />
               </Pressable>
+              {contact.isGroup ? (
+                <Pressable
+                  accessibilityLabel="Group settings"
+                  onPress={() => router.push(`/group/${contact.id}`)}
+                  hitSlop={12}
+                >
+                  <Ionicons name="people" size={28} color={colors.textOnDark} />
+                </Pressable>
+              ) : null}
             </View>
           ),
         }}

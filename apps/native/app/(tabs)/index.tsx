@@ -12,7 +12,20 @@ import { relativeTime } from '../../src/time';
 export default function Messages() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { conversations, ready, unreadCount, emergencyId, getContact, sendMessage } = useStore();
+  const { conversations, ready, unreadCount, emergencyId, getContact, sendMessage, isFavorite, toggleFavorite } =
+    useStore();
+
+  function favorite(contact: Contact) {
+    const fav = isFavorite(contact.id);
+    Alert.alert(
+      fav ? 'Remove favorite' : 'Add favorite',
+      fav ? `Remove ${contact.name} from favorites?` : `Pin ${contact.name} to the top?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: fav ? 'Remove' : 'Add', onPress: () => toggleFavorite(contact.id) },
+      ]
+    );
+  }
 
   const emergency = emergencyId ? getContact(emergencyId) : undefined;
 
@@ -94,13 +107,19 @@ export default function Messages() {
                 accessibilityRole="button"
                 accessibilityLabel={`Open chat with ${contact.name}${unread ? `, ${unread} unread` : ''}`}
                 onPress={() => router.push(`/chat/${contact.id}`)}
+                onLongPress={() => favorite(contact)}
                 style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
               >
                 <Avatar name={contact.name} isGroup={contact.isGroup} uri={contact.avatar} size={64} />
                 <View style={styles.rowText}>
-                  <Text style={[styles.name, unread > 0 && styles.nameUnread]} numberOfLines={1}>
-                    {contact.name}
-                  </Text>
+                  <View style={styles.nameRow}>
+                    {isFavorite(contact.id) ? (
+                      <Ionicons name="star" size={18} color={colors.warning} />
+                    ) : null}
+                    <Text style={[styles.name, unread > 0 && styles.nameUnread]} numberOfLines={1}>
+                      {contact.name}
+                    </Text>
+                  </View>
                   <View style={styles.subLine}>
                     {last ? (
                       <Text style={[styles.preview, unread > 0 && styles.previewUnread]} numberOfLines={1}>
@@ -182,6 +201,7 @@ const styles = StyleSheet.create({
   rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md },
   pressed: { opacity: 0.7 },
   rowText: { flex: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   name: { fontSize: fonts.body + 3, fontWeight: '800', color: colors.text },
   nameUnread: { color: colors.text },
   subLine: { flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: spacing.sm },

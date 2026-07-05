@@ -1,0 +1,177 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  currentUserId,
+  fetchKnownPeople,
+  renameGroup,
+  updateGroupMembers,
+  type KnownPerson,
+} from '../../src/api/pocketbase';
+import { Avatar } from '../../src/components/Avatar';
+import { useStore } from '../../src/store';
+import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+
+export default function GroupSettings() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { getContact, refresh } = useStore();
+
+  const contact = id ? getContact(id) : undefined;
+  const me = currentUserId();
+  const members = contact?.members ?? []; // the OTHER members
+  const currentIds = [me, ...members.map((m) => m.id)].filter(Boolean) as string[];
+
+  const [title, setTitle] = useState(contact?.name ?? '');
+  const [people, setPeople] = useState<KnownPerson[]>([]);
+
+  useEffect(() => {
+    fetchKnownPeople().then((list) => setPeople(list.filter((p) => !currentIds.includes(p.id))));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  if (!contact || !contact.isGroup) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.muted}>This group could not be found.</Text>
+      </View>
+    );
+  }
+
+  const saveName = async () => {
+    if (title.trim() && title.trim() !== contact.name) {
+      await renameGroup(contact.id, title);
+      await refresh();
+    }
+  };
+
+  const removeMember = (memberId: string, name: string) => {
+    Alert.alert('Remove', `Remove ${name} from the group?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          await updateGroupMembers(
+            contact.id,
+            currentIds.filter((x) => x !== memberId)
+          );
+          await refresh();
+        },
+      },
+    ]);
+  };
+
+  const addPerson = async (personId: string) => {
+    await updateGroupMembers(contact.id, [...currentIds, personId]);
+    await refresh();
+    setPeople((p) => p.filter((x) => x.id !== personId));
+  };
+
+  const leave = () => {
+    Alert.alert('Leave group', `Leave "${contact.name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: async () => {
+          await updateGroupMembers(
+            contact.id,
+            currentIds.filter((x) => x !== me)
+          );
+          await refresh();
+          router.replace('/');
+        },
+      },
+    ]);
+  };
+
+  return (
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
+      <Text style={styles.label}>Group name</Text>
+      <TextInput
+        style={styles.input}
+        value={title}
+        onChangeText={setTitle}
+        onBlur={saveName}
+        placeholder="Group name"
+        placeholderTextColor={colors.textMuted}
+        autoCapitalize="words"
+      />
+
+      <Text style={styles.label}>In this group</Text>
+      <View style={styles.card}>
+        <View style={styles.member}>
+          <Avatar name="You" size={48} />
+          <Text style={styles.memberName}>You</Text>
+        </View>
+        {members.map((m) => (
+          <View key={m.id} style={styles.member}>
+            <Avatar name={m.name} uri={m.avatar} size={48} />
+            <Text style={styles.memberName}>{m.name}</Text>
+            <Pressable accessibilityLabel={`Remove ${m.name}`} onPress={() => removeMember(m.id, m.name)} hitSlop={10}>
+              <Ionicons name="close-circle" size={28} color={colors.danger} />
+            </Pressable>
+          </View>
+        ))}
+      </View>
+
+      {people.length > 0 ? (
+        <>
+          <Text style={styles.label}>Add people</Text>
+          <View style={styles.card}>
+            {people.map((p) => (
+              <Pressable key={p.id} onPress={() => addPerson(p.id)} style={({ pressed }) => [styles.member, pressed && styles.pressed]}>
+                <Avatar name={p.name} uri={p.avatar} size={48} />
+                <Text style={styles.memberName}>{p.name}</Text>
+                <Ionicons name="add-circle" size={28} color={colors.accent} />
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
+
+      <Pressable onPress={leave} style={({ pressed }) => [styles.leave, pressed && styles.pressed]}>
+        <Ionicons name="exit-outline" size={26} color={colors.danger} />
+        <Text style={styles.leaveText}>Leave group</Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: { padding: spacing.md, gap: spacing.sm },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  muted: { fontSize: fonts.body, color: colors.textMuted },
+  label: { fontSize: fonts.body, fontWeight: '800', color: colors.text, marginTop: spacing.sm },
+  input: {
+    minHeight: TAP_TARGET,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    fontSize: fonts.body,
+    color: colors.text,
+    backgroundColor: colors.card,
+  },
+  card: { backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 2, borderColor: colors.border, overflow: 'hidden' },
+  member: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  memberName: { flex: 1, fontSize: fonts.body, fontWeight: '700', color: colors.text },
+  pressed: { opacity: 0.7 },
+  leave: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: TAP_TARGET,
+    marginTop: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.danger,
+    backgroundColor: colors.card,
+  },
+  leaveText: { fontSize: fonts.button, fontWeight: '800', color: colors.danger },
+});

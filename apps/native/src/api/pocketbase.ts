@@ -191,6 +191,18 @@ export async function createGroup(title: string, memberIds: string[]): Promise<s
   return rec.id;
 }
 
+/** Rename a group. */
+export async function renameGroup(conversationId: string, title: string): Promise<void> {
+  if (!pb) return;
+  await pb.collection('conversations').update(conversationId, { title: title.trim() });
+}
+
+/** Replace a group's member list (add / remove / leave). */
+export async function updateGroupMembers(conversationId: string, memberIds: string[]): Promise<void> {
+  if (!pb) return;
+  await pb.collection('conversations').update(conversationId, { members: Array.from(new Set(memberIds)) });
+}
+
 // --- messages -------------------------------------------------------------
 
 export async function fetchMessages(contactId: string): Promise<Message[] | null> {
