@@ -1,11 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { fetchContacts, fetchMessages, pushMessage, serverEnabled, subscribeMessages } from './api/pocketbase';
+import {
+  fetchContacts,
+  fetchMessages,
+  pushMessage,
+  pushPhoto,
+  pushVoice,
+  serverEnabled,
+  subscribeMessages,
+} from './api/pocketbase';
 import { useAuth } from './auth/AuthContext';
 import { seedContacts, seedMessages } from './seed';
 import { Contact, Conversation, Message } from './types';
 
 const STORAGE_KEY = 'kinly.state.v1';
+const READS_KEY = 'kinly.reads.v1';
 
 type State = {
   contacts: Contact[];
@@ -19,11 +28,19 @@ type Store = {
   getContact: (id: string) => Contact | undefined;
   findContact: (query: string) => Contact | undefined;
   messagesFor: (contactId: string) => Message[];
-  sendMessage: (contactId: string, text: string) => Message;
+  sendMessage: (contactId: string, text: string) => void;
+  sendPhoto: (contactId: string, uri: string, caption?: string) => void;
+  sendVoice: (contactId: string, uri: string, duration: number) => void;
   /** Simulate an incoming reply (used to make the demo feel alive). */
   receiveMessage: (contactId: string, text: string) => Message;
   /** Re-pull conversations & messages from the server (after adding a person/group). */
   refresh: () => Promise<void>;
+  /** Number of unread (received) messages in a conversation. */
+  unreadCount: (contactId: string) => number;
+  /** Total unread across all conversations. */
+  totalUnread: number;
+  /** Mark a conversation as read up to now. */
+  markRead: (contactId: string) => void;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -41,6 +58,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const [state, setState] = useState<State>({ contacts: [], messages: [] });
   const [ready, setReady] = useState(false);
+  // Per-conversation "read up to" timestamps (epoch millis), persisted locally.
+  const [reads, setReads] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    AsyncStorage.getItem(READS_KEY)
+      .then((raw) => raw && setReads(JSON.parse(raw)))
+      .catch(() => {});
+  }, []);
+
+  const markRead = useCallback((contactId: string) => {
+    setReads((r) => {
+      const next = { ...r, [contactId]: Date.now() };
+      AsyncStorage.setItem(READS_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
 
   // Pull the full picture from the server (contacts + their messages).
   const hydrateFromServer = useCallback(async (): Promise<boolean> => {
@@ -149,21 +182,62 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [state.messages]
   );
 
-  const addMessage = useCallback((contactId: string, text: string, mine: boolean): Message => {
-    const msg: Message = { id: nextId('m'), contactId, text: text.trim(), mine, at: Date.now() };
-    setState((s) => ({ ...s, messages: [...s.messages, msg] }));
-    return msg;
-  }, []);
-
-  const sendMessage = useCallback(
-    (contactId: string, text: string) => {
-      const msg = addMessage(contactId, text, true);
-      void pushMessage(contactId, text); // best-effort sync; no-op when offline
+  // Add a message to the local store (offline mode, or an incoming demo message).
+  const addLocal = useCallback(
+    (contactId: string, partial: Partial<Message> & { mine: boolean }): Message => {
+      const msg: Message = {
+        id: nextId('m'),
+        contactId,
+        text: '',
+        kind: 'text',
+        at: Date.now(),
+        authorId: uid ?? 'me',
+        ...partial,
+      };
+      setState((s) => ({ ...s, messages: [...s.messages, msg] }));
       return msg;
     },
-    [addMessage]
+    [uid]
   );
-  const receiveMessage = useCallback((contactId: string, text: string) => addMessage(contactId, text, false), [addMessage]);
+
+  // When online, we DON'T add locally — PocketBase realtime echoes the message
+  // back (to the sender too), which avoids duplicates. Offline, we add locally.
+  const sendMessage = useCallback(
+    (contactId: string, text: string) => {
+      if (online && uid) void pushMessage(contactId, text);
+      else addLocal(contactId, { text: text.trim(), kind: 'text', mine: true });
+    },
+    [online, uid, addLocal]
+  );
+
+  const sendPhoto = useCallback(
+    (contactId: string, uri: string, caption = '') => {
+      if (online && uid) void pushPhoto(contactId, uri, caption);
+      else addLocal(contactId, { text: caption, kind: 'photo', mine: true, imageUrl: uri });
+    },
+    [online, uid, addLocal]
+  );
+
+  const sendVoice = useCallback(
+    (contactId: string, uri: string, duration: number) => {
+      if (online && uid) void pushVoice(contactId, uri, duration);
+      else addLocal(contactId, { kind: 'voice', mine: true, audioUrl: uri, duration });
+    },
+    [online, uid, addLocal]
+  );
+
+  const receiveMessage = useCallback(
+    (contactId: string, text: string) => addLocal(contactId, { text, kind: 'text', mine: false }),
+    [addLocal]
+  );
+
+  const unreadCount = useCallback(
+    (contactId: string) => {
+      const since = reads[contactId] ?? 0;
+      return state.messages.filter((m) => m.contactId === contactId && !m.mine && m.at > since).length;
+    },
+    [state.messages, reads]
+  );
 
   const conversations = useMemo<Conversation[]>(() => {
     return state.contacts
@@ -177,6 +251,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       .sort((a, b) => b.lastAt - a.lastAt);
   }, [state.contacts, state.messages]);
 
+  const totalUnread = useMemo(
+    () => state.contacts.reduce((sum, c) => sum + unreadCount(c.id), 0),
+    [state.contacts, unreadCount]
+  );
+
   const value: Store = {
     ready,
     contacts: state.contacts,
@@ -185,8 +264,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     findContact,
     messagesFor,
     sendMessage,
+    sendPhoto,
+    sendVoice,
     receiveMessage,
     refresh,
+    unreadCount,
+    totalUnread,
+    markRead,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

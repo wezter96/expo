@@ -87,7 +87,14 @@ migrate(
           maxSelect: 1,
           collectionId: users.id,
         },
-        { type: 'text', name: 'text', required: true, max: 2000 },
+        // "text" (default), "photo", or "voice"
+        { type: 'text', name: 'kind', max: 20 },
+        // caption / body text (not required — photo & voice messages may have none)
+        { type: 'text', name: 'text', max: 2000 },
+        { type: 'file', name: 'image', maxSelect: 1, maxSize: 10485760, mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] },
+        { type: 'file', name: 'audio', maxSelect: 1, maxSize: 10485760, mimeTypes: ['audio/mp4', 'audio/m4a', 'audio/mpeg', 'audio/aac', 'audio/webm'] },
+        // voice message length in seconds
+        { type: 'number', name: 'duration' },
         { type: 'autodate', name: 'created', onCreate: true },
       ],
       indexes: ['CREATE INDEX idx_messages_conversation ON messages (conversation, created)'],

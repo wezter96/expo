@@ -15,10 +15,19 @@ export type Contact = {
   members?: Member[];
 };
 
+export type MessageKind = 'text' | 'photo' | 'voice';
+
 export type Message = {
   id: string;
   contactId: string;
   text: string;
+  kind: MessageKind;
+  /** Photo URL (kind === 'photo'). */
+  imageUrl?: string;
+  /** Audio URL (kind === 'voice'). */
+  audioUrl?: string;
+  /** Voice message length in seconds. */
+  duration?: number;
   /** true = sent by the app's user, false = received. */
   mine: boolean;
   /** id of the sender (used to label who spoke in group chats). */

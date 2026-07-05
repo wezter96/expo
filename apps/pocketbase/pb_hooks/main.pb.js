@@ -310,8 +310,13 @@ onRecordAfterCreateSuccess((e) => {
       authorName = $app.findRecordById('users', authorId).getString('name') || authorName;
     } catch (_) {}
 
+    const kind = msg.getString('kind');
+    let preview = msg.getString('text');
+    if (kind === 'photo') preview = '📷 Photo' + (preview ? ': ' + preview : '');
+    else if (kind === 'voice') preview = '🎤 Voice message';
+
     const title = isGroup ? conv.getString('title') || 'New message' : authorName;
-    const body = (isGroup ? authorName + ': ' : '') + msg.getString('text');
+    const body = (isGroup ? authorName + ': ' : '') + preview;
 
     const memberIds = conv.get('members') || [];
     const messages = [];

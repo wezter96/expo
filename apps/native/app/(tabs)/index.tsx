@@ -12,7 +12,7 @@ import { relativeTime } from '../../src/time';
 export default function Messages() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { conversations, ready } = useStore();
+  const { conversations, ready, unreadCount } = useStore();
 
   function call(contact: Contact) {
     if (!contact.phone) {
@@ -51,24 +51,32 @@ export default function Messages() {
       ) : (
         conversations.map(({ contact, messages }) => {
           const last = messages.length ? messages[messages.length - 1] : undefined;
+          const unread = unreadCount(contact.id);
+          const preview = last
+            ? last.kind === 'photo'
+              ? '📷 Photo'
+              : last.kind === 'voice'
+                ? '🎤 Voice message'
+                : last.text
+            : '';
           return (
             <View key={contact.id} style={styles.row}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Open chat with ${contact.name}`}
+                accessibilityLabel={`Open chat with ${contact.name}${unread ? `, ${unread} unread` : ''}`}
                 onPress={() => router.push(`/chat/${contact.id}`)}
                 style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
               >
                 <Avatar name={contact.name} isGroup={contact.isGroup} uri={contact.avatar} size={64} />
                 <View style={styles.rowText}>
-                  <Text style={styles.name} numberOfLines={1}>
+                  <Text style={[styles.name, unread > 0 && styles.nameUnread]} numberOfLines={1}>
                     {contact.name}
                   </Text>
                   <View style={styles.subLine}>
                     {last ? (
-                      <Text style={styles.preview} numberOfLines={1}>
+                      <Text style={[styles.preview, unread > 0 && styles.previewUnread]} numberOfLines={1}>
                         {last.mine ? 'You: ' : ''}
-                        {last.text}
+                        {preview}
                       </Text>
                     ) : (
                       <Text style={styles.relation} numberOfLines={1}>
@@ -78,6 +86,11 @@ export default function Messages() {
                     {last ? <Text style={styles.time}>{relativeTime(last.at)}</Text> : null}
                   </View>
                 </View>
+                {unread > 0 ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text>
+                  </View>
+                ) : null}
               </Pressable>
 
               {!contact.isGroup && (
@@ -130,8 +143,20 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   rowText: { flex: 1 },
   name: { fontSize: fonts.body + 3, fontWeight: '800', color: colors.text },
+  nameUnread: { color: colors.text },
   subLine: { flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: spacing.sm },
   preview: { flex: 1, fontSize: fonts.small, color: colors.textMuted },
+  previewUnread: { color: colors.text, fontWeight: '700' },
+  badge: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
+    paddingHorizontal: 6,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { color: colors.textOnDark, fontSize: fonts.small - 2, fontWeight: '800' },
   relation: { flex: 1, fontSize: fonts.small, color: colors.textMuted },
   time: { fontSize: fonts.small - 2, color: colors.textMuted },
   callBtn: {

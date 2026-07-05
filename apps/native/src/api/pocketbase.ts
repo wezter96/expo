@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import PocketBase, { type RecordModel } from 'pocketbase';
 import './eventsource'; // installs the realtime EventSource polyfill on native
 import type { AgentResult } from '../ai/agent';
-import type { Contact, Message } from '../types';
+import type { Contact, Message, MessageKind } from '../types';
 
 /**
  * PocketBase backend for Kinly (apps/pocketbase).
@@ -124,10 +124,15 @@ function toContact(c: ConversationDTO): Contact {
 }
 
 function toMessage(r: RecordModel, meId: string | null): Message {
+  const kind = ((r.kind as string) || 'text') as MessageKind;
   return {
     id: r.id,
     contactId: r.conversation as string,
-    text: r.text as string,
+    text: (r.text as string) ?? '',
+    kind,
+    imageUrl: r.image ? fileUrl('messages', r.id, r.image as string) : undefined,
+    audioUrl: r.audio ? fileUrl('messages', r.id, r.audio as string) : undefined,
+    duration: typeof r.duration === 'number' ? (r.duration as number) : undefined,
     mine: !!meId && r.author === meId,
     authorId: r.author as string,
     at: r.created ? Date.parse(r.created as string) : Date.now(),
@@ -207,10 +212,51 @@ export async function pushMessage(contactId: string, text: string): Promise<void
     await pb.collection('messages').create({
       conversation: contactId,
       author: pb.authStore.record.id,
+      kind: 'text',
       text: text.trim(),
     });
   } catch {
     // offline — the local store already holds the message
+  }
+}
+
+function fileField(uri: string, field: string, fallbackName: string, mime: string): FormData {
+  const name = uri.split('/').pop() || fallbackName;
+  const form = new FormData();
+  form.append(field, { uri, name, type: mime } as unknown as Blob);
+  return form;
+}
+
+/** Send a photo message. Returns true on success. */
+export async function pushPhoto(contactId: string, uri: string, caption = ''): Promise<boolean> {
+  if (!pb || !pb.authStore.record) return false;
+  try {
+    const form = fileField(uri, 'image', 'photo.jpg', 'image/jpeg');
+    form.append('conversation', contactId);
+    form.append('author', pb.authStore.record.id);
+    form.append('kind', 'photo');
+    form.append('text', caption.trim());
+    await pb.collection('messages').create(form);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Send a voice message. Returns true on success. */
+export async function pushVoice(contactId: string, uri: string, duration: number): Promise<boolean> {
+  if (!pb || !pb.authStore.record) return false;
+  try {
+    const form = fileField(uri, 'audio', 'voice.m4a', 'audio/m4a');
+    form.append('conversation', contactId);
+    form.append('author', pb.authStore.record.id);
+    form.append('kind', 'voice');
+    form.append('text', '');
+    form.append('duration', String(Math.round(duration)));
+    await pb.collection('messages').create(form);
+    return true;
+  } catch {
+    return false;
   }
 }
 

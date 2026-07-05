@@ -1,9 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Speech from 'expo-speech';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,7 +25,7 @@ export default function Chat() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { getContact, messagesFor, sendMessage } = useStore();
+  const { getContact, messagesFor, sendMessage, sendPhoto, markRead } = useStore();
   const [draft, setDraft] = useState('');
   const listRef = useRef<FlatList<Message>>(null);
 
@@ -34,6 +37,11 @@ export default function Chat() {
     const t = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     return () => clearTimeout(t);
   }, [messages.length]);
+
+  useEffect(() => {
+    // Opening the chat (and receiving while it's open) marks it read.
+    if (id) markRead(id);
+  }, [id, messages.length, markRead]);
 
   if (!contact) {
     return (
@@ -48,6 +56,30 @@ export default function Chat() {
     if (!text) return;
     sendMessage(contact!.id, text);
     setDraft('');
+  }
+
+  async function pickPhoto(source: 'camera' | 'library') {
+    const perm =
+      source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Please allow access to send a photo.');
+      return;
+    }
+    const result =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ quality: 0.6 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+    if (!result.canceled && result.assets[0]) sendPhoto(contact!.id, result.assets[0].uri);
+  }
+
+  function attachPhoto() {
+    Alert.alert('Send a photo', 'Where from?', [
+      { text: 'Take a photo', onPress: () => pickPhoto('camera') },
+      { text: 'Choose from library', onPress: () => pickPhoto('library') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   }
 
   function speak(text: string) {
@@ -107,6 +139,14 @@ export default function Chat() {
       />
 
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Send a photo"
+          onPress={attachPhoto}
+          style={({ pressed }) => [styles.attachBtn, pressed && styles.pressed]}
+        >
+          <Ionicons name="camera" size={30} color={colors.primary} />
+        </Pressable>
         <TextInput
           style={styles.input}
           placeholder="Write a message…"
@@ -153,9 +193,26 @@ function Bubble({
         style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}
       >
         {senderName ? <Text style={styles.sender}>{senderName}</Text> : null}
-        <Text style={[styles.bubbleText, mine ? styles.textMine : styles.textTheirs]}>
-          {message.text}
-        </Text>
+
+        {message.kind === 'photo' && message.imageUrl ? (
+          <Image source={{ uri: message.imageUrl }} style={styles.photo} resizeMode="cover" />
+        ) : null}
+
+        {message.kind === 'voice' ? (
+          <View style={styles.voiceRow}>
+            <Ionicons name="mic" size={22} color={mine ? colors.textOnDark : colors.primary} />
+            <Text style={[styles.bubbleText, mine ? styles.textMine : styles.textTheirs]}>
+              Voice message{message.duration ? ` · ${Math.round(message.duration)}s` : ''}
+            </Text>
+          </View>
+        ) : null}
+
+        {message.text ? (
+          <Text style={[styles.bubbleText, mine ? styles.textMine : styles.textTheirs]}>
+            {message.text}
+          </Text>
+        ) : null}
+
         <View style={styles.bubbleFooter}>
           <Text style={[styles.time, mine ? styles.timeMine : styles.timeTheirs]}>
             {clockTime(message.at)}
@@ -190,6 +247,8 @@ const styles = StyleSheet.create({
   bubbleMine: { backgroundColor: colors.bubbleMine, borderBottomRightRadius: radius.sm },
   bubbleTheirs: { backgroundColor: colors.bubbleTheirs, borderBottomLeftRadius: radius.sm },
   sender: { fontSize: fonts.small - 1, fontWeight: '800', color: colors.primary, marginBottom: 2 },
+  photo: { width: 220, height: 220, borderRadius: radius.md, marginBottom: 4, backgroundColor: colors.border },
+  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 2 },
   bubbleText: { fontSize: fonts.body + 1, lineHeight: fonts.body + 9 },
   textMine: { color: colors.textOnDark },
   textTheirs: { color: colors.text },
@@ -230,4 +289,15 @@ const styles = StyleSheet.create({
   },
   sendDisabled: { backgroundColor: colors.border },
   pressed: { opacity: 0.75 },
+  attachBtn: {
+    width: TAP_TARGET,
+    height: TAP_TARGET,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
+

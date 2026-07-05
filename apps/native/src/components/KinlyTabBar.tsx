@@ -3,6 +3,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useStore } from '../store';
 import { colors, fonts, spacing } from '../theme';
 
 /**
@@ -27,6 +28,7 @@ const LABELS: Record<string, string> = {
 
 export function KinlyTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { totalUnread } = useStore();
 
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
@@ -66,7 +68,14 @@ export function KinlyTabBar({ state, navigation }: BottomTabBarProps) {
             onPress={onPress}
             style={styles.sideTab}
           >
-            <Ionicons name={ICONS[route.name] ?? 'ellipse'} size={30} color={tint} />
+            <View>
+              <Ionicons name={ICONS[route.name] ?? 'ellipse'} size={30} color={tint} />
+              {route.name === 'index' && totalUnread > 0 ? (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>{totalUnread > 99 ? '99+' : totalUnread}</Text>
+                </View>
+              ) : null}
+            </View>
             <Text style={[styles.sideLabel, { color: tint }]}>{LABELS[route.name]}</Text>
           </Pressable>
         );
@@ -98,6 +107,19 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   sideLabel: { fontSize: fonts.small - 1, fontWeight: '700' },
+  tabBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -12,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 5,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeText: { color: colors.textOnDark, fontSize: fonts.small - 4, fontWeight: '800' },
 
   centerSlot: {
     flex: 1,

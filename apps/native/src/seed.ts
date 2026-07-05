@@ -22,13 +22,20 @@ export const seedContacts: Contact[] = [
 const now = Date.now();
 const min = 60 * 1000;
 
+const t = (id: string, contactId: string, text: string, mine: boolean, at: number): Message => ({
+  id,
+  contactId,
+  text,
+  kind: 'text',
+  mine,
+  at,
+});
+
 export const seedMessages: Message[] = [
-  { id: 'm1', contactId: 'c_mary', text: 'Hi Mom! How are you feeling today?', mine: false, at: now - 40 * min },
-  { id: 'm2', contactId: 'c_mary', text: 'Much better, thank you dear.', mine: true, at: now - 38 * min },
-  { id: 'm3', contactId: 'c_mary', text: 'I will pop by on Sunday with the kids.', mine: false, at: now - 20 * min },
-
-  { id: 'm4', contactId: 'g_family', text: 'Dinner at ours this weekend?', mine: false, at: now - 3 * 60 * min },
-  { id: 'm5', contactId: 'g_family', text: 'Sounds lovely!', mine: true, at: now - 2 * 60 * min },
-
-  { id: 'm6', contactId: 'c_ellen', text: 'Are we still on for cards Thursday?', mine: false, at: now - 26 * 60 * min },
+  t('m1', 'c_mary', 'Hi Mom! How are you feeling today?', false, now - 40 * min),
+  t('m2', 'c_mary', 'Much better, thank you dear.', true, now - 38 * min),
+  t('m3', 'c_mary', 'I will pop by on Sunday with the kids.', false, now - 20 * min),
+  t('m4', 'g_family', 'Dinner at ours this weekend?', false, now - 3 * 60 * min),
+  t('m5', 'g_family', 'Sounds lovely!', true, now - 2 * 60 * min),
+  t('m6', 'c_ellen', 'Are we still on for cards Thursday?', false, now - 26 * 60 * min),
 ];
