@@ -101,7 +101,8 @@ app/
     index.tsx          Messages (conversation list)
     assistant.tsx      AI assistant
     settings.tsx       Settings
-  chat/[id].tsx        Conversation
+  chat/[id].tsx        Conversation (video + call buttons in the header)
+  call/[id].tsx        Video call screen
 src/
   theme.ts             Design tokens tuned for older eyes/hands
   store.tsx            Data store (local + PocketBase realtime sync)
@@ -109,9 +110,16 @@ src/
   types.ts             Data types
   time.ts              Friendly timestamps
   ai/agent.ts          On-device AI intent → action fallback
-  api/pocketbase.ts    PocketBase client (realtime + assistant)
+  api/pocketbase.ts    PocketBase client (realtime + assistant + video token)
+  video/               LiveKit call — VideoCall.native.tsx (real) + .tsx (web stub)
   components/          Avatar, BigButton, KinlyTabBar
 ```
+
+## Video calls
+
+Group video uses LiveKit and needs a **dev build** (`npx expo run:ios` /
+`run:android`) — WebRTC native modules don't run in Expo Go or the web bundle,
+where a placeholder is shown instead. See `../livekit/README.md`.
 
 ## Roadmap ideas
 

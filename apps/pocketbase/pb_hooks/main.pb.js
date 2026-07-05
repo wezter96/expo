@@ -166,3 +166,49 @@ routerAdd('POST', '/api/kinly/assistant', (e) => {
     }
   }
 });
+
+/**
+ * Video call token: POST /api/kinly/video-token  { room, identity, name }
+ *
+ * Mints a LiveKit access token (HS256 JWT) so a family member can join a video
+ * room. The LiveKit API key/secret stay on the server (env), never on the
+ * device. Configure LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET in the
+ * PocketBase environment. See apps/livekit/README.md.
+ */
+routerAdd('POST', '/api/kinly/video-token', (e) => {
+  const info = e.requestInfo();
+  const body = info.body || {};
+  const room = String(body.room || '').trim();
+  const identity = String(body.identity || '').trim();
+  const name = String(body.name || identity).trim();
+
+  const url = $os.getenv('LIVEKIT_URL');
+  const apiKey = $os.getenv('LIVEKIT_API_KEY');
+  const apiSecret = $os.getenv('LIVEKIT_API_SECRET');
+
+  if (!url || !apiKey || !apiSecret) {
+    return e.json(503, { error: 'Video calling is not configured on the server.' });
+  }
+  if (!room || !identity) {
+    return e.json(400, { error: 'room and identity are required.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: apiKey,
+    sub: identity,
+    name: name,
+    nbf: now,
+    video: {
+      room: room,
+      roomJoin: true,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    },
+  };
+
+  // $security.createJWT signs HS256 and adds `exp` = now + duration (seconds).
+  const token = $security.createJWT(payload, apiSecret, 60 * 60 * 4);
+  return e.json(200, { token: token, url: url });
+});

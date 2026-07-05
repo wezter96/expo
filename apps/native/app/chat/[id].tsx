@@ -74,12 +74,22 @@ export default function Chat() {
       <Stack.Screen
         options={{
           title: contact.name,
-          headerRight: () =>
-            contact.isGroup ? null : (
-              <Pressable accessibilityLabel={`Call ${contact.name}`} onPress={call} hitSlop={12}>
-                <Ionicons name="call" size={28} color={colors.textOnDark} />
+          headerRight: () => (
+            <View style={styles.headerActions}>
+              <Pressable
+                accessibilityLabel={`Video call ${contact.name}`}
+                onPress={() => router.push(`/call/${contact.id}`)}
+                hitSlop={12}
+              >
+                <Ionicons name="videocam" size={30} color={colors.textOnDark} />
               </Pressable>
-            ),
+              {!contact.isGroup && (
+                <Pressable accessibilityLabel={`Call ${contact.name}`} onPress={call} hitSlop={12}>
+                  <Ionicons name="call" size={28} color={colors.textOnDark} />
+                </Pressable>
+              )}
+            </View>
+          ),
         }}
       />
 
@@ -156,6 +166,7 @@ function Bubble({ message, onSpeak }: { message: Message; onSpeak: (t: string) =
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingRight: spacing.xs },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   missing: { fontSize: fonts.body, color: colors.textMuted, textAlign: 'center' },
   listContent: { padding: spacing.md, gap: spacing.sm, flexGrow: 1 },

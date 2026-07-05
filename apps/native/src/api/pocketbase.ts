@@ -126,3 +126,27 @@ export async function askServerAssistant(text: string): Promise<AgentResult | nu
     return null;
   }
 }
+
+// --- video calls ----------------------------------------------------------
+
+export type VideoToken = { token: string; url: string };
+
+/**
+ * Ask the server for a LiveKit access token to join a conversation's video
+ * room. Returns null if the server (or video) is not configured.
+ */
+export async function fetchVideoToken(
+  room: string,
+  identity: string,
+  name: string
+): Promise<VideoToken | null> {
+  if (!pb) return null;
+  try {
+    return await pb.send('/api/kinly/video-token', {
+      method: 'POST',
+      body: { room, identity, name },
+    });
+  } catch {
+    return null;
+  }
+}

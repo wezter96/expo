@@ -1,0 +1,14 @@
+services:
+  livekit:
+    image: livekit/livekit-server:v1.8
+    container_name: kinly-livekit
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    network_mode: host # simplest for WebRTC media on a dev machine / single VPS
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    # Without host networking, publish these instead:
+    # ports:
+    #   - "7880:7880"
+    #   - "7881:7881"
+    #   - "50000-60000:50000-60000/udp"

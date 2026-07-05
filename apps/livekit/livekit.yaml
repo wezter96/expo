@@ -1,0 +1,23 @@
+# LiveKit SFU configuration for Kinly.
+# Docs: https://docs.livekit.io/home/self-hosting/deployment/
+port: 7880
+rtc:
+  tcp_port: 7881
+  # UDP range used for media; must be open on the host/firewall.
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: true
+
+# API keys: "<key>: <secret>". The secret MUST be at least 32 characters.
+# Generate strong values and mirror them into the PocketBase environment
+# (LIVEKIT_API_KEY / LIVEKIT_API_SECRET). CHANGE THESE before any real use.
+keys:
+  devkey: devsecret_change_me_to_a_32char_min_secret
+
+# Optional: LiveKit can run an embedded TURN server for clients behind strict
+# NATs (cheaper than a separate coturn for small scale).
+turn:
+  enabled: false
+  # domain: turn.your-domain.com
+  # tls_port: 5349
+  # udp_port: 3478

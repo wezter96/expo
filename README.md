@@ -18,11 +18,12 @@ family plan.
 ```
 apps/
   native/       Expo (React Native) app — the elderly-friendly UI
-  pocketbase/   PocketBase backend: schema (pb_migrations) + AI hook (pb_hooks)
+  pocketbase/   PocketBase backend: schema (pb_migrations) + AI/video hooks (pb_hooks)
+  livekit/      LiveKit SFU config for group video calls
 ```
 
 **Stack:** Expo Router · React Native · PocketBase (SQLite + realtime + hooks) ·
-Turborepo · TypeScript.
+LiveKit (WebRTC video) · Turborepo · TypeScript.
 
 ## Why Kinly
 
@@ -70,10 +71,17 @@ usable with **no server**: it seeds a sample family locally and persists with
 sends through it, subscribes for live updates, and routes the assistant
 server-side — all best-effort, with graceful fallback to local data.
 
-> Video calling (group calls, Discord-style) is the next milestone: a
-> self-hosted **LiveKit** SFU, which keeps per-call bandwidth cheap on a
-> Hetzner-class host and fits the $4.99 budget. It needs a native dev build
-> (WebRTC), so it lands in its own step.
+## Group video calls 📹
+
+Discord-style group video runs on a self-hosted **LiveKit** SFU (`apps/livekit`)
+— open source, and cheap because bandwidth is the only real cost (keep it on a
+Hetzner-class host, not per-minute managed video). Tap the video icon in any
+chat: the app asks PocketBase for a LiveKit token (secret stays server-side),
+joins the conversation's room, and shows big mute / camera / **Leave** controls.
+
+Because WebRTC needs native modules, video runs in a **dev build** (not Expo Go
+or the web bundle) — `npx expo run:ios` / `run:android`. On web/Expo Go the app
+shows a friendly "open on your phone" placeholder. See `apps/livekit/README.md`.
 
 ## Getting started
 
@@ -111,7 +119,6 @@ unset to run the app fully offline.
 
 ## Roadmap
 
-- **Group video calls** via self-hosted LiveKit (Discord-style, budget-friendly)
 - Real auth + membership-scoped access rules (PocketBase auth)
 - Push notifications for new messages
 - Photo & voice-note sharing (PocketBase file storage)
