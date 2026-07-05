@@ -2,32 +2,17 @@
   "name": "kinly",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/native"
   ],
-  "type": "module",
   "scripts": {
     "dev": "turbo run dev",
-    "build": "turbo run build",
     "check-types": "turbo run check-types",
-    "dev:native": "turbo run dev -F native",
-    "dev:server": "turbo run dev -F server",
-    "db:push": "turbo run db:push -F @kinly/db",
-    "db:studio": "turbo run db:studio -F @kinly/db",
-    "db:generate": "turbo run db:generate -F @kinly/db",
-    "db:migrate": "turbo run db:migrate -F @kinly/db",
-    "db:local": "turbo run db:local -F @kinly/db"
-  },
-  "dependencies": {
-    "@kinly/env": "*",
-    "dotenv": "^17.4.2",
-    "zod": "^4.4.3"
+    "dev:native": "npm --workspace native run start",
+    "pb": "cd apps/pocketbase && ./pocketbase serve --http=0.0.0.0:8090"
   },
   "devDependencies": {
-    "@kinly/config": "*",
-    "@types/node": "^22.13.14",
     "turbo": "^2.10.2",
-    "typescript": "^6"
+    "typescript": "~5.9.2"
   },
   "packageManager": "npm@10.9.7"
 }

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { fetchContacts, fetchMessages, pushMessage } from './api/client';
+import { fetchContacts, fetchMessages, pushMessage, subscribeMessages } from './api/pocketbase';
 import { seedContacts, seedMessages } from './seed';
 import { Contact, Conversation, Message } from './types';
 
@@ -77,6 +77,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!ready) return;
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
   }, [state, ready]);
+
+  // Live updates: when a server is configured, new messages stream in over
+  // PocketBase realtime and are merged in (deduped by id).
+  useEffect(() => {
+    if (!ready) return;
+    let unsub = () => {};
+    let active = true;
+    subscribeMessages((msg) => {
+      setState((s) => {
+        if (s.messages.some((m) => m.id === msg.id)) {
+          return { ...s, messages: s.messages.map((m) => (m.id === msg.id ? msg : m)) };
+        }
+        return { ...s, messages: [...s.messages, msg] };
+      });
+    }).then((fn) => {
+      if (active) unsub = fn;
+      else fn();
+    });
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, [ready]);
 
   const getContact = useCallback(
     (id: string) => state.contacts.find((c) => c.id === id),

@@ -1,0 +1,10 @@
+# PocketBase runtime data (database, storage, logs)
+pb_data/
+
+# Downloaded binary / archives
+pocketbase
+pocketbase.exe
+*.zip
+
+# Type hints PocketBase generates on first run
+pb_data/types.d.ts

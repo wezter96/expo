@@ -72,37 +72,45 @@ npm run dev:native      # or: npm --workspace native run start
 ```
 
 Then scan the QR code with the **Expo Go** app on your phone, or press `i` / `a`
-to open an iOS / Android simulator. See the root `README.md` for running the
-tRPC server alongside it.
+to open an iOS / Android simulator. See the root `README.md` and
+`../pocketbase/README.md` for running the PocketBase backend alongside it.
 
 ## How data works
 
 Contacts and messages are seeded locally (`src/seed.ts`) and persisted on the
 device with `AsyncStorage`, so the app is **fully usable offline**. When
-`EXPO_PUBLIC_SERVER_URL` is set (see `.env.example`), the app instead hydrates
-from the Kinly tRPC server (`../server`) as the source of truth, sends messages
-through it, and routes the assistant server-side — all with graceful fallback to
-local data when the server is unreachable. The tRPC client lives in
-`src/api/client.ts`.
+`EXPO_PUBLIC_PB_URL` is set (see `.env.example`), the app hydrates from
+PocketBase as the source of truth, sends messages through it, **subscribes to
+realtime updates**, and routes the assistant server-side — all with graceful
+fallback to local data when the server is unreachable. The PocketBase client
+lives in `src/api/pocketbase.ts`.
+
+## Navigation
+
+Three bottom tabs (`app/(tabs)/`): **Messages** (left), a raised circular
+**Assistant** button (center, AI sparkles), and **Settings** (right). Chat
+detail (`app/chat/[id].tsx`) pushes over the tabs.
 
 ## Project structure
 
 ```
-app/                 Screens (Expo Router file-based routing)
-  _layout.tsx        Navigation + providers
-  index.tsx          Home
-  contacts.tsx       People
-  assistant.tsx      AI assistant
-  chat/[id].tsx      Conversation
+app/
+  _layout.tsx          Root stack + providers
+  (tabs)/
+    _layout.tsx        Bottom tabs + custom tab bar
+    index.tsx          Messages (conversation list)
+    assistant.tsx      AI assistant
+    settings.tsx       Settings
+  chat/[id].tsx        Conversation
 src/
-  theme.ts           Design tokens tuned for older eyes/hands
-  store.tsx          Local persistent data (contacts, messages)
-  seed.ts            First-run sample data
-  types.ts           Data types
-  time.ts            Friendly timestamps
-  ai/agent.ts        On-device AI intent → action fallback
-  api/client.ts      tRPC client (type-safe calls to the server)
-  components/        Avatar, BigButton
+  theme.ts             Design tokens tuned for older eyes/hands
+  store.tsx            Data store (local + PocketBase realtime sync)
+  seed.ts              First-run sample data
+  types.ts             Data types
+  time.ts              Friendly timestamps
+  ai/agent.ts          On-device AI intent → action fallback
+  api/pocketbase.ts    PocketBase client (realtime + assistant)
+  components/          Avatar, BigButton, KinlyTabBar
 ```
 
 ## Roadmap ideas

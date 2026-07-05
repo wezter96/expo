@@ -5,9 +5,11 @@ and friends — plus a friendly **AI assistant** you can just *tell* what to do
 ("Call Mary", "Tell Tom I'll be late"). Think Signal or Messenger, stripped down
 to only what matters, with big text, big buttons, and read-aloud everywhere.
 
-This is a **type-safe monorepo** scaffolded with
-[Better-T-Stack](https://www.better-t-stack.dev/): an Expo (React Native) app
-talking to a Hono + tRPC backend over end-to-end typed APIs.
+Built to run **cheap**: an Expo (React Native) app on top of
+[PocketBase](https://pocketbase.io) — a single open-source Go binary that
+bundles auth, a realtime database, file storage and JS hooks. The whole backend
+fits on a ~$5/month VPS, the target for a **$4.99 / month, up-to-10-member**
+family plan.
 
 ---
 
@@ -15,17 +17,12 @@ talking to a Hono + tRPC backend over end-to-end typed APIs.
 
 ```
 apps/
-  native/      Expo (React Native) app — the elderly-friendly UI
-  server/      Hono server exposing the tRPC API (Node runtime)
-packages/
-  api/         tRPC routers (contacts, messages, assistant) + AI agent
-  db/          Drizzle ORM schema + libSQL (SQLite) client + seed data
-  env/         Type-safe environment variables (server & native)
-  config/      Shared TypeScript config
+  native/       Expo (React Native) app — the elderly-friendly UI
+  pocketbase/   PocketBase backend: schema (pb_migrations) + AI hook (pb_hooks)
 ```
 
-**Stack:** Expo Router · React Native · tRPC · Hono · Drizzle ORM · libSQL
-(SQLite) · Turborepo · TypeScript.
+**Stack:** Expo Router · React Native · PocketBase (SQLite + realtime + hooks) ·
+Turborepo · TypeScript.
 
 ## Why Kinly
 
@@ -34,14 +31,15 @@ gestures. Kinly is built around a few rules:
 
 - **Large, high-contrast type** — body text never below 20pt, buttons at 24pt.
 - **Big touch targets** — every tappable thing is at least 64pt tall.
-- **One clear path** — a home screen with a few obvious choices, no hidden menus.
+- **Three tabs, one clear path** — Messages · Assistant · Settings, with a big
+  circular AI button in the middle.
 - **Read aloud** — any received message can be spoken out loud (tap the speaker).
 - **Talk, don't tap** — the AI assistant turns plain language into actions.
 
 ## The AI Assistant 🤖
 
-The **Assistant** screen is the heart of the app. You type (or, on a real
-device, dictate) a plain-language request and it figures out what to do:
+The center tab is the heart of the app. You type (or, on a real device, dictate)
+a plain-language request and it figures out what to do:
 
 | You say | What happens |
 | --- | --- |
@@ -53,81 +51,71 @@ device, dictate) a plain-language request and it figures out what to do:
 Anything that reaches out (a call or a sent message) always shows a big
 **Yes / No** confirmation first, so nothing happens by accident.
 
-**The AI runs on the server** (`packages/api/src/lib/agent.ts`), reached through
-the `assistant.run` tRPC procedure. That keeps any Anthropic API key on the
-server, never on the device. Two engines, so it always works:
+**The AI runs inside PocketBase** as a JS hook (`POST /api/kinly/assistant`), so
+any Anthropic API key stays on the server, never on the device. Two engines, so
+it always works:
 
-1. **Claude (Anthropic) API** — when `ANTHROPIC_API_KEY` is set on the server,
-   free-form requests are understood via tool-calling.
-2. **Built-in rule-based parser** — a fallback so the assistant works with no
-   key and no network. If the server is unreachable, the app even falls back to
-   an on-device copy of the parser, so the feature is never dead.
+1. **Claude (Anthropic) API** — when `ANTHROPIC_API_KEY` is set in the
+   PocketBase environment, free-form requests are understood via tool-calling.
+2. **Built-in rule-based parser** — a fallback so it works with no key. If the
+   server is unreachable, the app even falls back to an on-device copy of the
+   parser, so the feature is never dead.
 
-## Offline-first
+## Real-time chat & offline-first
 
-The app is fully usable with **no server running**: contacts and messages are
-seeded locally and persisted with `AsyncStorage`. When `EXPO_PUBLIC_SERVER_URL`
-is set, the app hydrates from the server (source of truth), sends messages
-through `messages.send`, and routes the assistant through `assistant.run` — all
-best-effort, with graceful fallback to local data.
+Messages live in PocketBase and stream to every device over **PocketBase
+realtime** (Server-Sent Events), so a chat updates live. The app is also fully
+usable with **no server**: it seeds a sample family locally and persists with
+`AsyncStorage`. When `EXPO_PUBLIC_PB_URL` is set it hydrates from PocketBase,
+sends through it, subscribes for live updates, and routes the assistant
+server-side — all best-effort, with graceful fallback to local data.
+
+> Video calling (group calls, Discord-style) is the next milestone: a
+> self-hosted **LiveKit** SFU, which keeps per-call bandwidth cheap on a
+> Hetzner-class host and fits the $4.99 budget. It needs a native dev build
+> (WebRTC), so it lands in its own step.
 
 ## Getting started
 
-Requires Node 22+ (a `bun`-based flow works too). From the repo root:
+**1. Start the backend** (see `apps/pocketbase/README.md` for details):
+
+```bash
+cd apps/pocketbase
+./pocketbase serve --http=0.0.0.0:8090     # or: docker compose up
+```
+
+It auto-applies the schema and seeds a sample family on first run. Admin UI at
+`http://localhost:8090/_/`.
+
+**2. Start the app:**
 
 ```bash
 npm install
-
-# 1. Create the SQLite tables
-npm run db:push
-
-# 2. Start the tRPC server (http://localhost:3000)
-npm run dev:server
-
-# 3. In another terminal, start the app
 npm run dev:native
 ```
 
-Then scan the QR code with **Expo Go**, or press `i` / `a` for a simulator.
+Scan the QR code with **Expo Go**, or press `i` / `a` for a simulator.
 
-To connect the app to the server, copy `apps/native/.env.example` to
-`apps/native/.env` and set `EXPO_PUBLIC_SERVER_URL` to your machine's LAN IP
-(e.g. `http://192.168.1.20:3000`) — `localhost` won't resolve from a phone.
-Leave it unset to run the app fully offline.
+**3. Connect them:** copy `apps/native/.env.example` to `apps/native/.env` and
+set `EXPO_PUBLIC_PB_URL` to your machine's LAN IP (e.g.
+`http://192.168.1.20:8090`) — `localhost` won't resolve from a phone. Leave it
+unset to run the app fully offline.
 
-Optional AI: copy `apps/server/.env.example` to `apps/server/.env` and set
-`ANTHROPIC_API_KEY` to enable Claude-powered understanding.
-
-## Useful scripts
+## Scripts
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Run everything via Turborepo |
-| `npm run dev:server` | Start only the tRPC/Hono server |
-| `npm run dev:native` | Start only the Expo app |
-| `npm run db:push` | Apply the Drizzle schema to SQLite |
-| `npm run db:studio` | Open Drizzle Studio |
-| `npm run check-types` | Type-check every package |
+| `npm run dev:native` | Start the Expo app |
+| `npm run pb` | Run the PocketBase server (needs the binary in apps/pocketbase) |
+| `npm run check-types` | Type-check the app |
 
-## The API
+## Roadmap
 
-Type-safe tRPC procedures (see `packages/api/src/routers`):
-
-- `contacts.list` — all contacts and groups
-- `messages.list({ contactId })` — a conversation, oldest first
-- `messages.send({ contactId, text })` — send a message (persisted)
-- `assistant.run({ text })` — interpret a request → `{ say, action, needsConfirm }`
-
-The app imports only `import type { AppRouter }`, so no server code is bundled
-into the mobile app — just full end-to-end type safety over HTTP.
-
-## Roadmap ideas
-
-- On-device speech-to-text for true hands-free use
-- Real auth + end-to-end encryption
-- Photo sharing and video calls
+- **Group video calls** via self-hosted LiveKit (Discord-style, budget-friendly)
+- Real auth + membership-scoped access rules (PocketBase auth)
 - Push notifications for new messages
-- An even larger "extra big" accessibility mode
+- Photo & voice-note sharing (PocketBase file storage)
+- On-device speech-to-text for true hands-free use
 
 ---
 

@@ -4,7 +4,7 @@ import React from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../src/components/Avatar';
-import { serverEnabled } from '../../src/api/client';
+import { serverEnabled } from '../../src/api/pocketbase';
 import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
 
 type Row = {
