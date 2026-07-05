@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Speech from 'expo-speech';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -18,7 +18,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AgentAction, AgentResult, aiConfigured, runAgent } from '../../src/ai/agent';
 import { askServerAssistant, serverEnabled } from '../../src/api/pocketbase';
 import { useStore } from '../../src/store';
-import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { useTheme } from '../../src/theme-context';
 
 type Turn = { role: 'you' | 'assistant'; text: string };
 
@@ -28,6 +29,8 @@ export default function Assistant() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { contacts, findContact, getContact, sendMessage, messagesFor } = useStore();
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const [input, setInput] = useState('');
   const [turns, setTurns] = useState<Turn[]>([
@@ -248,7 +251,8 @@ export default function Assistant() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Colors, fonts: Fonts) {
+  return StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
   listContent: { padding: spacing.md, gap: spacing.sm },
 
@@ -331,4 +335,5 @@ const styles = StyleSheet.create({
   },
   sendDisabled: { backgroundColor: colors.border },
   pressed: { opacity: 0.7 },
-});
+  });
+}

@@ -1,16 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../src/components/Avatar';
 import { useStore } from '../src/store';
-import { colors, fonts, radius, spacing } from '../src/theme';
+import { type Colors, type Fonts, radius, spacing } from '../src/theme';
+import { useTheme } from '../src/theme-context';
 
 export default function Emergency() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { contacts, emergencyId, setEmergency } = useStore();
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const people = contacts.filter((c) => !c.isGroup);
 
@@ -70,7 +73,8 @@ export default function Emergency() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Colors, fonts: Fonts) {
+  return StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.sm },
   intro: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.md },
   title: { fontSize: fonts.title, fontWeight: '800', color: colors.text },
@@ -101,4 +105,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   doneText: { fontSize: fonts.button, fontWeight: '800', color: colors.textOnDark },
-});
+  });
+}

@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '../store';
-import { colors, fonts, spacing } from '../theme';
+import { type Colors, type Fonts, spacing } from '../theme';
+import { useTheme } from '../theme-context';
 
 /**
  * A big, elderly-friendly bottom tab bar with a raised circular AI button in
@@ -29,6 +30,8 @@ const LABELS: Record<string, string> = {
 export function KinlyTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { totalUnread } = useStore();
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
@@ -87,7 +90,8 @@ export function KinlyTabBar({ state, navigation }: BottomTabBarProps) {
 const BAR_HEIGHT = 74;
 const CENTER_SIZE = 74;
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Colors, fonts: Fonts) {
+  return StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -150,4 +154,5 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.primary,
   },
-});
+  });
+}

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -17,12 +17,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { myAvatarUrl, updateProfile } from '../src/api/pocketbase';
 import { useAuth } from '../src/auth/AuthContext';
 import { Avatar } from '../src/components/Avatar';
-import { colors, fonts, radius, spacing, TAP_TARGET } from '../src/theme';
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../src/theme';
+import { useTheme } from '../src/theme-context';
 
 export default function Profile() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const [name, setName] = useState(user?.name ?? '');
   const [photo, setPhoto] = useState<string | undefined>(undefined);
@@ -107,7 +110,8 @@ export default function Profile() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Colors, fonts: Fonts) {
+  return StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.sm, alignItems: 'stretch' },
   photoWrap: { alignSelf: 'center', marginTop: spacing.sm },
@@ -150,4 +154,5 @@ const styles = StyleSheet.create({
   },
   dim: { opacity: 0.7 },
   primaryText: { fontSize: fonts.button, fontWeight: '800', color: colors.textOnDark },
-});
+  });
+}

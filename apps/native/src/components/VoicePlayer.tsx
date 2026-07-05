@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, fonts, spacing } from '../theme';
+import { type Fonts, spacing } from '../theme';
+import { useTheme } from '../theme-context';
 
 function fmt(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
@@ -20,6 +21,8 @@ export function VoicePlayer({
   mine: boolean;
   duration?: number;
 }) {
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(fonts), [fonts]);
   const player = useAudioPlayer(uri ? { uri } : undefined);
   const status = useAudioPlayerStatus(player);
 
@@ -58,10 +61,12 @@ export function VoicePlayer({
   );
 }
 
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 180 },
-  middle: { flex: 1, gap: 6 },
-  track: { height: 6, borderRadius: 3, overflow: 'hidden' },
-  fill: { height: 6, borderRadius: 3 },
-  time: { fontSize: fonts.small - 2, fontWeight: '700' },
-});
+function makeStyles(fonts: Fonts) {
+  return StyleSheet.create({
+    row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 180 },
+    middle: { flex: 1, gap: 6 },
+    track: { height: 6, borderRadius: 3, overflow: 'hidden' },
+    fill: { height: 6, borderRadius: 3 },
+    time: { fontSize: fonts.small - 2, fontWeight: '700' },
+  });
+}

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, fonts, radius, spacing, TAP_TARGET } from '../theme';
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../theme';
+import { useTheme } from '../theme-context';
 
 type Props = {
   label: string;
@@ -14,13 +15,6 @@ type Props = {
   disabled?: boolean;
 };
 
-const VARIANTS = {
-  primary: { bg: colors.primary, fg: colors.textOnDark, sub: '#D6E5F5' },
-  success: { bg: colors.accent, fg: colors.textOnDark, sub: '#D6F0DF' },
-  danger: { bg: colors.danger, fg: colors.textOnDark, sub: '#F5D6D2' },
-  neutral: { bg: colors.card, fg: colors.text, sub: colors.textMuted },
-} as const;
-
 export function BigButton({
   label,
   onPress,
@@ -30,6 +24,16 @@ export function BigButton({
   loading = false,
   disabled = false,
 }: Props) {
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+
+  const VARIANTS = {
+    primary: { bg: colors.primary, fg: colors.textOnDark, sub: '#D6E5F5' },
+    success: { bg: colors.accent, fg: colors.textOnDark, sub: '#D6F0DF' },
+    danger: { bg: colors.danger, fg: colors.textOnDark, sub: '#F5D6D2' },
+    neutral: { bg: colors.card, fg: colors.text, sub: colors.textMuted },
+  } as const;
+
   const v = VARIANTS[variant];
   const isNeutral = variant === 'neutral';
   return (
@@ -65,21 +69,23 @@ export function BigButton({
   );
 }
 
-const styles = StyleSheet.create({
-  button: {
-    minHeight: TAP_TARGET + 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.lg,
-    gap: spacing.md,
-  },
-  neutralBorder: { borderWidth: 2, borderColor: colors.border },
-  pressed: { opacity: 0.75, transform: [{ scale: 0.99 }] },
-  disabled: { opacity: 0.5 },
-  iconWrap: { width: 44, alignItems: 'center' },
-  textWrap: { flex: 1 },
-  label: { fontSize: fonts.button, fontWeight: '800' },
-  sublabel: { fontSize: fonts.small, marginTop: 2, fontWeight: '600' },
-});
+function makeStyles(colors: Colors, fonts: Fonts) {
+  return StyleSheet.create({
+    button: {
+      minHeight: TAP_TARGET + 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+      borderRadius: radius.lg,
+      gap: spacing.md,
+    },
+    neutralBorder: { borderWidth: 2, borderColor: colors.border },
+    pressed: { opacity: 0.75, transform: [{ scale: 0.99 }] },
+    disabled: { opacity: 0.5 },
+    iconWrap: { width: 44, alignItems: 'center' },
+    textWrap: { flex: 1 },
+    label: { fontSize: fonts.button, fontWeight: '800' },
+    sublabel: { fontSize: fonts.small, marginTop: 2, fontWeight: '600' },
+  });
+}

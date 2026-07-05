@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../src/components/Avatar';
 import { useStore } from '../../src/store';
 import { Contact } from '../../src/types';
-import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { useTheme } from '../../src/theme-context';
 import { relativeTime } from '../../src/time';
 
 export default function Messages() {
@@ -14,6 +15,8 @@ export default function Messages() {
   const insets = useSafeAreaInsets();
   const { conversations, ready, unreadCount, emergencyId, getContact, sendMessage, isFavorite, toggleFavorite } =
     useStore();
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   function favorite(contact: Contact) {
     const fav = isFavorite(contact.id);
@@ -159,7 +162,8 @@ export default function Messages() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Colors, fonts: Fonts) {
+  return StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.sm },
   muted: { fontSize: fonts.body, color: colors.textMuted, padding: spacing.md },
   sos: {
@@ -225,4 +229,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+  });
+}

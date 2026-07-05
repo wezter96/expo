@@ -1,14 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../src/components/Avatar';
 import { myAvatarUrl, serverEnabled } from '../../src/api/pocketbase';
 import { useAuth } from '../../src/auth/AuthContext';
 import { useStore } from '../../src/store';
-import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { useTheme } from '../../src/theme-context';
 
 type Row = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -23,6 +24,8 @@ export default function Settings() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { emergencyId, getContact } = useStore();
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const online = serverEnabled();
   const version = Constants.expoConfig?.version ?? '1.0.0';
   const emergencyName = emergencyId ? getContact(emergencyId)?.name : undefined;
@@ -48,10 +51,10 @@ export default function Settings() {
         Alert.alert('Read aloud', 'Tap the speaker icon on any received message to hear it read out loud.'),
     },
     {
-      icon: 'text',
-      label: 'Large text',
-      value: 'On',
-      onPress: () => Alert.alert('Large text', 'Kinly always uses large, high-contrast text to be easy on the eyes.'),
+      icon: 'contrast',
+      label: 'Display',
+      value: 'Text size & dark mode',
+      onPress: () => router.push('/display'),
     },
     {
       icon: 'alert-circle',
@@ -132,7 +135,8 @@ export default function Settings() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Colors, fonts: Fonts) {
+  return StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.lg },
   signOut: {
     flexDirection: 'row',
@@ -182,4 +186,5 @@ const styles = StyleSheet.create({
   rowText: { flex: 1 },
   rowLabel: { fontSize: fonts.body + 1, fontWeight: '700', color: colors.text },
   rowValue: { fontSize: fonts.small, color: colors.textMuted, marginTop: 2 },
-});
+  });
+}

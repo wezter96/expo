@@ -9,7 +9,7 @@ import { AuthProvider, useAuth } from '../src/auth/AuthContext';
 import { AuthScreen } from '../src/auth/AuthScreen';
 import { IncomingCallOverlay } from '../src/calls/IncomingCallOverlay';
 import { StoreProvider } from '../src/store';
-import { colors, fonts } from '../src/theme';
+import { ThemeProvider, useTheme } from '../src/theme-context';
 
 /** Opens the right chat when a push notification is tapped. */
 function useNotificationRouting() {
@@ -25,6 +25,7 @@ function useNotificationRouting() {
 
 function Gate() {
   const { ready, needsAuth } = useAuth();
+  const { colors, fonts } = useTheme();
   useNotificationRouting();
 
   if (!ready) {
@@ -56,22 +57,30 @@ function Gate() {
         <Stack.Screen name="profile" options={{ title: 'Your profile', presentation: 'modal' }} />
         <Stack.Screen name="emergency" options={{ title: 'Emergency contact', presentation: 'modal' }} />
         <Stack.Screen name="group/[id]" options={{ title: 'Group', presentation: 'modal' }} />
+        <Stack.Screen name="display" options={{ title: 'Display', presentation: 'modal' }} />
       </Stack>
       <IncomingCallOverlay />
     </>
   );
 }
 
+function ThemedStatusBar() {
+  const { isDark } = useTheme();
+  return <StatusBar style={isDark ? 'light' : 'light'} />;
+}
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <StoreProvider>
-            <StatusBar style="light" />
-            <Gate />
-          </StoreProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <StoreProvider>
+              <ThemedStatusBar />
+              <Gate />
+            </StoreProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

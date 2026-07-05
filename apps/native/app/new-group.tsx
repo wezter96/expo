@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -14,12 +14,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createGroup, fetchKnownPeople, type KnownPerson } from '../src/api/pocketbase';
 import { Avatar } from '../src/components/Avatar';
 import { useStore } from '../src/store';
-import { colors, fonts, radius, spacing, TAP_TARGET } from '../src/theme';
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../src/theme';
+import { useTheme } from '../src/theme-context';
 
 export default function NewGroup() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { refresh } = useStore();
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const [title, setTitle] = useState('');
   const [people, setPeople] = useState<KnownPerson[]>([]);
@@ -124,7 +127,8 @@ export default function NewGroup() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Colors, fonts: Fonts) {
+  return StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md, gap: spacing.sm },
   label: { fontSize: fonts.body, fontWeight: '800', color: colors.text, marginTop: spacing.sm },
@@ -170,4 +174,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryText: { fontSize: fonts.button, fontWeight: '800', color: colors.textOnDark },
-});
+  });
+}

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -12,13 +12,16 @@ import {
 } from '../../src/api/pocketbase';
 import { Avatar } from '../../src/components/Avatar';
 import { useStore } from '../../src/store';
-import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { useTheme } from '../../src/theme-context';
 
 export default function GroupSettings() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { getContact, refresh } = useStore();
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const contact = id ? getContact(id) : undefined;
   const me = currentUserId();
@@ -142,7 +145,8 @@ export default function GroupSettings() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Colors, fonts: Fonts) {
+  return StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   muted: { fontSize: fonts.body, color: colors.textMuted },
@@ -174,4 +178,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   leaveText: { fontSize: fonts.button, fontWeight: '800', color: colors.danger },
-});
+  });
+}

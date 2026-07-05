@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,7 +12,8 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, fonts, radius, spacing, TAP_TARGET } from '../theme';
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../theme';
+import { useTheme } from '../theme-context';
 import { useAuth } from './AuthContext';
 
 type Mode = 'signin' | 'signup';
@@ -20,6 +21,8 @@ type Mode = 'signin' | 'signup';
 export function AuthScreen() {
   const insets = useSafeAreaInsets();
   const { signIn, signUp } = useAuth();
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [mode, setMode] = useState<Mode>('signin');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -130,6 +133,8 @@ function Field({
   hint,
   ...props
 }: { label: string; hint?: string } & React.ComponentProps<typeof TextInput>) {
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.fieldWrap}>
       <Text style={styles.label}>{label}</Text>
@@ -139,7 +144,8 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Colors, fonts: Fonts) {
+  return StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.md },
   logo: {
@@ -182,4 +188,5 @@ const styles = StyleSheet.create({
   primaryText: { fontSize: fonts.button, fontWeight: '800', color: colors.textOnDark },
   switch: { alignItems: 'center', paddingVertical: spacing.md },
   switchText: { fontSize: fonts.body, color: colors.primary, fontWeight: '700' },
-});
+  });
+}

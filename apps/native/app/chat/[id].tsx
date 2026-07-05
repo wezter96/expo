@@ -3,7 +3,7 @@ import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } fr
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Speech from 'expo-speech';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { VoicePlayer } from '../../src/components/VoicePlayer';
 import {
   Alert,
@@ -36,8 +36,10 @@ import { useStore } from '../../src/store';
 import { presenceLabel } from '../../src/time';
 import { Message } from '../../src/types';
 
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { useTheme } from '../../src/theme-context';
+
 const EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
-import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
 import { clockTime } from '../../src/time';
 
 export default function Chat() {
@@ -55,6 +57,8 @@ export default function Chat() {
   const listRef = useRef<FlatList<Message>>(null);
   const online = serverEnabled();
   const meId = currentUserId();
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const contact = id ? getContact(id) : undefined;
   const messages = id ? messagesFor(id) : [];
@@ -390,6 +394,8 @@ function Bubble({
   onLongPress: () => void;
   onTapReaction: (emoji: string) => void;
 }) {
+  const { colors, fonts } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const mine = message.mine;
   return (
     <View style={[styles.bubbleRow, mine ? styles.rowMine : styles.rowTheirs]}>
@@ -455,7 +461,8 @@ function Bubble({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Colors, fonts: Fonts) {
+  return StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingRight: spacing.xs },
   headerTitle: { alignItems: 'flex-start' },
@@ -576,5 +583,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+  });
+}
 
