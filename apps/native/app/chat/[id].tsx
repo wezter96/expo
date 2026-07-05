@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Speech from 'expo-speech';
 import React, { useEffect, useRef, useState } from 'react';
+import { VoicePlayer } from '../../src/components/VoicePlayer';
 import {
   Alert,
   FlatList,
@@ -25,8 +27,11 @@ export default function Chat() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { getContact, messagesFor, sendMessage, sendPhoto, markRead } = useStore();
+  const { getContact, messagesFor, sendMessage, sendPhoto, sendVoice, markRead } = useStore();
   const [draft, setDraft] = useState('');
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const listRef = useRef<FlatList<Message>>(null);
 
   const contact = id ? getContact(id) : undefined;
@@ -42,6 +47,42 @@ export default function Chat() {
     // Opening the chat (and receiving while it's open) marks it read.
     if (id) markRead(id);
   }, [id, messages.length, markRead]);
+
+  useEffect(() => {
+    if (!recording) return;
+    const timer = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(timer);
+  }, [recording]);
+
+  async function startRecording() {
+    try {
+      const perm = await AudioModule.requestRecordingPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Microphone needed', 'Please allow microphone access to record a voice message.');
+        return;
+      }
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setElapsed(0);
+      setRecording(true);
+    } catch {
+      Alert.alert('Could not start recording');
+    }
+  }
+
+  async function stopRecording(shouldSend: boolean) {
+    try {
+      await recorder.stop();
+    } catch {
+      /* ignore */
+    }
+    const seconds = elapsed;
+    setRecording(false);
+    if (shouldSend && recorder.uri && seconds >= 1) {
+      sendVoice(contact!.id, recorder.uri, seconds);
+    }
+  }
 
   if (!contact) {
     return (
@@ -139,36 +180,67 @@ export default function Chat() {
       />
 
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Send a photo"
-          onPress={attachPhoto}
-          style={({ pressed }) => [styles.attachBtn, pressed && styles.pressed]}
-        >
-          <Ionicons name="camera" size={30} color={colors.primary} />
-        </Pressable>
-        <TextInput
-          style={styles.input}
-          placeholder="Write a message…"
-          placeholderTextColor={colors.textMuted}
-          value={draft}
-          onChangeText={setDraft}
-          multiline
-          returnKeyType="send"
-        />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Send message"
-          onPress={send}
-          disabled={!draft.trim()}
-          style={({ pressed }) => [
-            styles.sendBtn,
-            !draft.trim() && styles.sendDisabled,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons name="send" size={30} color={colors.textOnDark} />
-        </Pressable>
+        {recording ? (
+          <>
+            <Pressable
+              accessibilityLabel="Cancel recording"
+              onPress={() => stopRecording(false)}
+              style={({ pressed }) => [styles.attachBtn, pressed && styles.pressed]}
+            >
+              <Ionicons name="trash" size={28} color={colors.danger} />
+            </Pressable>
+            <View style={styles.recordingBar}>
+              <View style={styles.recDot} />
+              <Text style={styles.recText}>Recording… {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Send voice message"
+              onPress={() => stopRecording(true)}
+              style={({ pressed }) => [styles.sendBtn, pressed && styles.pressed]}
+            >
+              <Ionicons name="send" size={30} color={colors.textOnDark} />
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send a photo"
+              onPress={attachPhoto}
+              style={({ pressed }) => [styles.attachBtn, pressed && styles.pressed]}
+            >
+              <Ionicons name="camera" size={30} color={colors.primary} />
+            </Pressable>
+            <TextInput
+              style={styles.input}
+              placeholder="Write a message…"
+              placeholderTextColor={colors.textMuted}
+              value={draft}
+              onChangeText={setDraft}
+              multiline
+              returnKeyType="send"
+            />
+            {draft.trim() ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Send message"
+                onPress={send}
+                style={({ pressed }) => [styles.sendBtn, pressed && styles.pressed]}
+              >
+                <Ionicons name="send" size={30} color={colors.textOnDark} />
+              </Pressable>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Record a voice message"
+                onPress={startRecording}
+                style={({ pressed }) => [styles.micBtn, pressed && styles.pressed]}
+              >
+                <Ionicons name="mic" size={30} color={colors.textOnDark} />
+              </Pressable>
+            )}
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -199,12 +271,7 @@ function Bubble({
         ) : null}
 
         {message.kind === 'voice' ? (
-          <View style={styles.voiceRow}>
-            <Ionicons name="mic" size={22} color={mine ? colors.textOnDark : colors.primary} />
-            <Text style={[styles.bubbleText, mine ? styles.textMine : styles.textTheirs]}>
-              Voice message{message.duration ? ` · ${Math.round(message.duration)}s` : ''}
-            </Text>
-          </View>
+          <VoicePlayer uri={message.audioUrl} mine={mine} duration={message.duration} />
         ) : null}
 
         {message.text ? (
@@ -289,6 +356,28 @@ const styles = StyleSheet.create({
   },
   sendDisabled: { backgroundColor: colors.border },
   pressed: { opacity: 0.75 },
+  micBtn: {
+    width: TAP_TARGET,
+    height: TAP_TARGET,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordingBar: {
+    flex: 1,
+    minHeight: TAP_TARGET,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.danger,
+    backgroundColor: colors.card,
+  },
+  recDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.danger },
+  recText: { fontSize: fonts.body, fontWeight: '700', color: colors.text },
   attachBtn: {
     width: TAP_TARGET,
     height: TAP_TARGET,
