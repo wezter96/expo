@@ -12,7 +12,9 @@ import { relativeTime } from '../../src/time';
 export default function Messages() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { conversations, ready, unreadCount } = useStore();
+  const { conversations, ready, unreadCount, emergencyId, getContact, sendMessage } = useStore();
+
+  const emergency = emergencyId ? getContact(emergencyId) : undefined;
 
   function call(contact: Contact) {
     if (!contact.phone) {
@@ -22,8 +24,35 @@ export default function Messages() {
     Linking.openURL(`tel:${contact.phone}`).catch(() => Alert.alert('Could not start the call'));
   }
 
+  function sos() {
+    if (!emergency) return;
+    Alert.alert('Get help', `Message and call ${emergency.name} now?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Yes, get help',
+        style: 'destructive',
+        onPress: () => {
+          sendMessage(emergency.id, '🚨 I need help. Please call me.');
+          router.push(`/call/${emergency.id}?mode=voice`);
+        },
+      },
+    ]);
+  }
+
   return (
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
+      {emergency ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Get help from ${emergency.name}`}
+          onPress={sos}
+          style={({ pressed }) => [styles.sos, pressed && styles.pressed]}
+        >
+          <Ionicons name="alert-circle" size={30} color={colors.textOnDark} />
+          <Text style={styles.sosText}>Get help — call {emergency.name}</Text>
+        </Pressable>
+      ) : null}
+
       {!ready ? (
         <Text style={styles.muted}>Loading…</Text>
       ) : conversations.length === 0 ? (
@@ -114,6 +143,17 @@ export default function Messages() {
 const styles = StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.sm },
   muted: { fontSize: fonts.body, color: colors.textMuted, padding: spacing.md },
+  sos: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: 64,
+    backgroundColor: colors.danger,
+    borderRadius: radius.lg,
+    marginBottom: spacing.xs,
+  },
+  sosText: { color: colors.textOnDark, fontSize: fonts.button, fontWeight: '800' },
   emptyWrap: { alignItems: 'center', gap: spacing.md, paddingTop: spacing.xl, paddingHorizontal: spacing.md },
   emptyTitle: { fontSize: fonts.title, fontWeight: '800', color: colors.text },
   emptyBody: { fontSize: fonts.body, color: colors.textMuted, textAlign: 'center', lineHeight: fonts.body + 8 },

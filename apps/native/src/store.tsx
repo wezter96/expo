@@ -15,6 +15,7 @@ import { Contact, Conversation, Message } from './types';
 
 const STORAGE_KEY = 'kinly.state.v1';
 const READS_KEY = 'kinly.reads.v1';
+const SOS_KEY = 'kinly.sos.v1';
 
 type State = {
   contacts: Contact[];
@@ -41,6 +42,9 @@ type Store = {
   totalUnread: number;
   /** Mark a conversation as read up to now. */
   markRead: (contactId: string) => void;
+  /** The designated emergency (SOS) contact id, if any. */
+  emergencyId: string | null;
+  setEmergency: (contactId: string | null) => void;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -73,6 +77,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       AsyncStorage.setItem(READS_KEY, JSON.stringify(next)).catch(() => {});
       return next;
     });
+  }, []);
+
+  // Designated emergency (SOS) contact.
+  const [emergencyId, setEmergencyIdState] = useState<string | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(SOS_KEY)
+      .then((v) => v && setEmergencyIdState(v))
+      .catch(() => {});
+  }, []);
+  const setEmergency = useCallback((contactId: string | null) => {
+    setEmergencyIdState(contactId);
+    if (contactId) AsyncStorage.setItem(SOS_KEY, contactId).catch(() => {});
+    else AsyncStorage.removeItem(SOS_KEY).catch(() => {});
   }, []);
 
   // Pull the full picture from the server (contacts + their messages).
@@ -271,6 +288,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     unreadCount,
     totalUnread,
     markRead,
+    emergencyId,
+    setEmergency,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

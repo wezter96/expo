@@ -138,9 +138,32 @@ migrate(
       indexes: ['CREATE UNIQUE INDEX idx_reads_conv_user ON reads (conversation, user)'],
     });
     app.save(reads);
+
+    // --- calls (ring signaling) -----------------------------------------
+    const calls = new Collection({
+      type: 'base',
+      name: 'calls',
+      listRule: '@request.auth.id != "" && conversation.members.id ?= @request.auth.id',
+      viewRule: '@request.auth.id != "" && conversation.members.id ?= @request.auth.id',
+      createRule: '@request.auth.id != "" && caller.id ?= @request.auth.id && conversation.members.id ?= @request.auth.id',
+      updateRule: '@request.auth.id != "" && conversation.members.id ?= @request.auth.id',
+      deleteRule: null,
+      fields: [
+        { type: 'relation', name: 'conversation', required: true, cascadeDelete: true, maxSelect: 1, collectionId: conversations.id },
+        { type: 'relation', name: 'caller', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        // "voice" or "video"
+        { type: 'text', name: 'mode', max: 10 },
+        // "ringing" | "accepted" | "declined" | "ended"
+        { type: 'text', name: 'status', max: 12 },
+        { type: 'autodate', name: 'created', onCreate: true },
+        { type: 'autodate', name: 'updated', onCreate: true, onUpdate: true },
+      ],
+      indexes: ['CREATE INDEX idx_calls_conversation ON calls (conversation, created)'],
+    });
+    app.save(calls);
   },
   (app) => {
-    for (const name of ['reactions', 'reads', 'messages', 'conversations']) {
+    for (const name of ['calls', 'reactions', 'reads', 'messages', 'conversations']) {
       try {
         app.delete(app.findCollectionByNameOrId(name));
       } catch (_) {

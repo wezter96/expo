@@ -353,3 +353,57 @@ onRecordAfterCreateSuccess((e) => {
 
   e.next();
 }, 'messages');
+
+// When a call starts (ringing), push "X is calling" to the other members.
+onRecordAfterCreateSuccess((e) => {
+  try {
+    const call = e.record;
+    if (call.getString('status') !== 'ringing') {
+      e.next();
+      return;
+    }
+    const conv = $app.findRecordById('conversations', call.getString('conversation'));
+    const callerId = call.getString('caller');
+    let callerName = 'Someone';
+    try {
+      callerName = $app.findRecordById('users', callerId).getString('name') || callerName;
+    } catch (_) {}
+
+    const mode = call.getString('mode') === 'video' ? 'video' : 'voice';
+    const isGroup = conv.getBool('isGroup');
+    const title = isGroup ? conv.getString('title') || 'Incoming call' : callerName;
+    const body = '📞 ' + callerName + ' is calling (' + mode + ')';
+
+    const memberIds = conv.get('members') || [];
+    const messages = [];
+    for (const id of memberIds) {
+      if (id === callerId) continue;
+      let token = '';
+      try {
+        token = $app.findRecordById('users', id).getString('pushToken');
+      } catch (_) {}
+      if (token) {
+        messages.push({
+          to: token,
+          title: title,
+          body: body,
+          sound: 'default',
+          priority: 'high',
+          data: { conversationId: conv.id, callId: call.id, mode: mode, incomingCall: true },
+        });
+      }
+    }
+    if (messages.length > 0) {
+      $http.send({
+        url: 'https://exp.host/--/api/v2/push/send',
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify(messages),
+        timeout: 20,
+      });
+    }
+  } catch (err) {
+    $app.logger().error('call notify failed', 'error', String(err));
+  }
+  e.next();
+}, 'calls');

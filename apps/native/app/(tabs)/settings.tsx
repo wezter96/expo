@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../src/components/Avatar';
 import { myAvatarUrl, serverEnabled } from '../../src/api/pocketbase';
 import { useAuth } from '../../src/auth/AuthContext';
+import { useStore } from '../../src/store';
 import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
 
 type Row = {
@@ -21,8 +22,10 @@ export default function Settings() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const { emergencyId, getContact } = useStore();
   const online = serverEnabled();
   const version = Constants.expoConfig?.version ?? '1.0.0';
+  const emergencyName = emergencyId ? getContact(emergencyId)?.name : undefined;
 
   const confirmSignOut = () =>
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
@@ -49,6 +52,13 @@ export default function Settings() {
       label: 'Large text',
       value: 'On',
       onPress: () => Alert.alert('Large text', 'Kinly always uses large, high-contrast text to be easy on the eyes.'),
+    },
+    {
+      icon: 'alert-circle',
+      label: 'Emergency contact',
+      value: emergencyName ?? 'Not set — tap to choose',
+      color: colors.danger,
+      onPress: () => router.push('/emergency'),
     },
     {
       icon: 'help-circle',

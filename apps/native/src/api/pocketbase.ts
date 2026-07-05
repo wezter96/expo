@@ -368,6 +368,62 @@ export async function heartbeat(): Promise<void> {
   }
 }
 
+// --- calls (ring signaling) -----------------------------------------------
+
+export type CallMode = 'voice' | 'video';
+export type IncomingCall = { id: string; conversationId: string; callerId: string; mode: CallMode; at: number };
+
+/** Ring the other members of a conversation. */
+export async function startCall(conversationId: string, mode: CallMode): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  try {
+    await pb.collection('calls').create({
+      conversation: conversationId,
+      caller: pb.authStore.record.id,
+      mode,
+      status: 'ringing',
+    });
+  } catch {
+    // best-effort; the call screen still opens
+  }
+}
+
+export async function respondCall(callId: string, status: 'accepted' | 'declined' | 'ended'): Promise<void> {
+  if (!pb) return;
+  try {
+    await pb.collection('calls').update(callId, { status });
+  } catch {
+    // best-effort
+  }
+}
+
+/** Subscribe to incoming calls (ringing, from someone else, within the last 30s). */
+export async function subscribeCalls(onCall: (c: IncomingCall) => void): Promise<() => void> {
+  if (!pb || !pb.authStore.isValid || typeof globalThis.EventSource === 'undefined') return () => {};
+  const me = currentUserId();
+  try {
+    await pb.collection('calls').subscribe('*', (e) => {
+      if (e.action !== 'create') return;
+      const r = e.record;
+      if (r.status !== 'ringing' || r.caller === me) return;
+      const at = r.created ? Date.parse(r.created as string) : Date.now();
+      if (Date.now() - at > 30000) return;
+      onCall({
+        id: r.id,
+        conversationId: r.conversation as string,
+        callerId: r.caller as string,
+        mode: (r.mode as string) === 'video' ? 'video' : 'voice',
+        at,
+      });
+    });
+    return () => {
+      pb.collection('calls').unsubscribe('*').catch(() => {});
+    };
+  } catch {
+    return () => {};
+  }
+}
+
 // --- assistant ------------------------------------------------------------
 
 export async function askServerAssistant(text: string): Promise<AgentResult | null> {

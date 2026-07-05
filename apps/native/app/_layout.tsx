@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
 import { AuthScreen } from '../src/auth/AuthScreen';
+import { IncomingCallOverlay } from '../src/calls/IncomingCallOverlay';
 import { StoreProvider } from '../src/store';
 import { colors, fonts } from '../src/theme';
 
@@ -37,22 +38,26 @@ function Gate() {
   if (needsAuth) return <AuthScreen />;
 
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.primary },
-        headerTintColor: colors.textOnDark,
-        headerTitleStyle: { fontSize: fonts.heading, fontWeight: '800' },
-        headerBackTitle: 'Back',
-        contentStyle: { backgroundColor: colors.background },
-      }}
-    >
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="chat/[id]" options={{ title: 'Chat' }} />
-      <Stack.Screen name="call/[id]" options={{ headerShown: false, animation: 'fade' }} />
-      <Stack.Screen name="new-chat" options={{ title: 'Add a person', presentation: 'modal' }} />
-      <Stack.Screen name="new-group" options={{ title: 'New group', presentation: 'modal' }} />
-      <Stack.Screen name="profile" options={{ title: 'Your profile', presentation: 'modal' }} />
-    </Stack>
+    <>
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.primary },
+          headerTintColor: colors.textOnDark,
+          headerTitleStyle: { fontSize: fonts.heading, fontWeight: '800' },
+          headerBackTitle: 'Back',
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="chat/[id]" options={{ title: 'Chat' }} />
+        <Stack.Screen name="call/[id]" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="new-chat" options={{ title: 'Add a person', presentation: 'modal' }} />
+        <Stack.Screen name="new-group" options={{ title: 'New group', presentation: 'modal' }} />
+        <Stack.Screen name="profile" options={{ title: 'Your profile', presentation: 'modal' }} />
+        <Stack.Screen name="emergency" options={{ title: 'Emergency contact', presentation: 'modal' }} />
+      </Stack>
+      <IncomingCallOverlay />
+    </>
   );
 }
 

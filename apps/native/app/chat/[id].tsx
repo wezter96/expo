@@ -26,7 +26,9 @@ import {
   markConversationRead,
   serverEnabled,
   setReaction,
+  startCall,
   subscribeCollection,
+  type CallMode,
   type Reaction,
   type Read,
 } from '../../src/api/pocketbase';
@@ -167,6 +169,11 @@ export default function Chat() {
     ]);
   }
 
+  function beginCall(mode: CallMode) {
+    void startCall(contact!.id, mode); // rings the other members (no-op offline)
+    router.push(`/call/${contact!.id}?mode=${mode}`);
+  }
+
   function toggleReaction(messageId: string, emoji: string) {
     const mine = reactions.find((r) => r.messageId === messageId && r.userId === meId);
     setReaction(messageId, emoji, mine);
@@ -217,14 +224,14 @@ export default function Chat() {
             <View style={styles.headerActions}>
               <Pressable
                 accessibilityLabel={`Voice call ${contact.name}`}
-                onPress={() => router.push(`/call/${contact.id}?mode=voice`)}
+                onPress={() => beginCall('voice')}
                 hitSlop={12}
               >
                 <Ionicons name="call" size={28} color={colors.textOnDark} />
               </Pressable>
               <Pressable
                 accessibilityLabel={`Video call ${contact.name}`}
-                onPress={() => router.push(`/call/${contact.id}`)}
+                onPress={() => beginCall('video')}
                 hitSlop={12}
               >
                 <Ionicons name="videocam" size={30} color={colors.textOnDark} />
