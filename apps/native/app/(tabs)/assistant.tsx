@@ -15,10 +15,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AgentAction, AgentResult, aiConfigured, runAgent } from '../src/ai/agent';
-import { askServerAssistant, serverEnabled } from '../src/api/client';
-import { useStore } from '../src/store';
-import { colors, fonts, radius, spacing, TAP_TARGET } from '../src/theme';
+import { AgentAction, AgentResult, aiConfigured, runAgent } from '../../src/ai/agent';
+import { askServerAssistant, serverEnabled } from '../../src/api/client';
+import { useStore } from '../../src/store';
+import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
 
 type Turn = { role: 'you' | 'assistant'; text: string };
 

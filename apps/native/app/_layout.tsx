@@ -21,9 +21,7 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: colors.background },
             }}
           >
-            <Stack.Screen name="index" options={{ title: 'Kinly' }} />
-            <Stack.Screen name="contacts" options={{ title: 'People' }} />
-            <Stack.Screen name="assistant" options={{ title: 'Assistant' }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="chat/[id]" options={{ title: 'Chat' }} />
           </Stack>
         </StoreProvider>
