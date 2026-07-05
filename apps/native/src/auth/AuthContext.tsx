@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { loadStoredAuth, pb, serverEnabled } from '../api/pocketbase';
+import { registerForPush } from '../push';
 
 export type KinlyUser = { id: string; name: string; email: string; phone: string };
 
@@ -11,6 +12,8 @@ type AuthValue = {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (input: { name: string; phone: string; email: string; password: string }) => Promise<void>;
   signOut: () => void;
+  /** Re-read the signed-in user from the auth store (after a profile edit). */
+  refreshUser: () => void;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -43,8 +46,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       if (active) {
-        setUser(readUser());
+        const u = readUser();
+        setUser(u);
         setReady(true);
+        if (u) void registerForPush();
       }
     })();
     return () => {
@@ -56,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!pb) throw new Error('No server configured.');
     await pb.collection('users').authWithPassword(email.trim(), password);
     setUser(readUser());
+    void registerForPush();
   }, []);
 
   const signUp = useCallback(
@@ -70,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       await pb.collection('users').authWithPassword(email.trim(), password);
       setUser(readUser());
+      void registerForPush();
     },
     []
   );
@@ -79,6 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(() => setUser(readUser()), []);
+
   const value = useMemo<AuthValue>(
     () => ({
       ready,
@@ -87,8 +96,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signUp,
       signOut,
+      refreshUser,
     }),
-    [ready, user, signIn, signUp, signOut]
+    [ready, user, signIn, signUp, signOut, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

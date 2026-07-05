@@ -1,6 +1,7 @@
-import { Stack } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,8 +10,21 @@ import { AuthScreen } from '../src/auth/AuthScreen';
 import { StoreProvider } from '../src/store';
 import { colors, fonts } from '../src/theme';
 
+/** Opens the right chat when a push notification is tapped. */
+function useNotificationRouting() {
+  const router = useRouter();
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const id = response.notification.request.content.data?.conversationId;
+      if (typeof id === 'string') router.push(`/chat/${id}`);
+    });
+    return () => sub.remove();
+  }, [router]);
+}
+
 function Gate() {
   const { ready, needsAuth } = useAuth();
+  useNotificationRouting();
 
   if (!ready) {
     return (
@@ -37,6 +51,7 @@ function Gate() {
       <Stack.Screen name="call/[id]" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="new-chat" options={{ title: 'Add a person', presentation: 'modal' }} />
       <Stack.Screen name="new-group" options={{ title: 'New group', presentation: 'modal' }} />
+      <Stack.Screen name="profile" options={{ title: 'Your profile', presentation: 'modal' }} />
     </Stack>
   );
 }

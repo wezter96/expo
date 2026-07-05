@@ -105,26 +105,33 @@ app/
   call/[id].tsx        Video call screen
   new-chat.tsx         Add a person by phone number
   new-group.tsx        Create a group and pick members
+  profile.tsx          Edit your name + photo
 src/
   theme.ts             Design tokens tuned for older eyes/hands
   store.tsx            Data store (local + PocketBase realtime, re-keyed on the user)
   seed.ts              Offline sample data
   types.ts             Data types
   time.ts              Friendly timestamps
+  push.ts              Expo push registration + notification handler
   auth/                AuthContext + AuthScreen (sign in / sign up, the gate)
   ai/agent.ts          On-device AI intent → action fallback
-  api/pocketbase.ts    PocketBase client (auth, realtime, people, assistant, video)
+  api/pocketbase.ts    PocketBase client (auth, realtime, people, profile, video)
   api/eventsource*.ts  Realtime EventSource polyfill (native only)
   video/               LiveKit call — VideoCall.native.tsx (real) + .tsx (web stub)
   components/          Avatar, BigButton, KinlyTabBar, AddButton
 ```
 
-## Accounts
+## Accounts, profiles & notifications
 
 When `EXPO_PUBLIC_PB_URL` is set, the app requires sign in / sign up (email +
 password, with your name + phone). Add family by phone number (`+`), create
-groups, and sign out from Settings. With no server it runs an offline demo with
-no login.
+groups, edit your **profile** (name + photo) from Settings, and sign out. With
+no server it runs an offline demo with no login.
+
+**Push notifications** need an EAS project id — run `eas init` once, then a dev
+build. On first sign-in the app registers this device's Expo push token; the
+PocketBase hook notifies the other members when a message arrives. Push does not
+work in Expo Go / on web (the app degrades gracefully).
 
 ## Video calls
 

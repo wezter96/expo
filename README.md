@@ -70,6 +70,10 @@ it always works:
   1:1 chat (`New chat`).
 - **Create groups** — name a group and pick people from your chats; every
   conversation (1:1 or group) has the video-call button built in.
+- **Profiles** — set a display name and photo (shown throughout the app); group
+  chats label who said what.
+- **Push notifications** — new messages notify the other members via Expo Push
+  (needs `eas init` for a project id; the server-side sender is a PocketBase hook).
 - Access is **membership-scoped** in PocketBase: you only see your own chats.
 
 ## Real-time chat & offline-first
@@ -129,8 +133,8 @@ unset to run the app fully offline.
 
 ## Roadmap
 
-- Push notifications for new messages (Expo Push)
-- Profile photos, presence (online dots), read receipts
+- Presence (online dots), read receipts, unread badges
+- Email verification / password reset (built into PocketBase)
 - Photo & voice-note sharing (PocketBase file storage)
 - On-device speech-to-text for true hands-free use
 

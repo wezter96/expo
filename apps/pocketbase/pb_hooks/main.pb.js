@@ -7,9 +7,14 @@
 function userBrief(id) {
   try {
     const u = $app.findRecordById('users', id);
-    return { id: u.id, name: u.getString('name') || u.getString('email') || 'Someone', phone: u.getString('phone') || '' };
+    return {
+      id: u.id,
+      name: u.getString('name') || u.getString('email') || 'Someone',
+      phone: u.getString('phone') || '',
+      avatar: u.getString('avatar') || '',
+    };
   } catch (_) {
-    return { id: id, name: 'Someone', phone: '' };
+    return { id: id, name: 'Someone', phone: '', avatar: '' };
   }
 }
 
@@ -34,6 +39,8 @@ function mapConversation(conv, meId) {
     phone: phone,
     isGroup: isGroup,
     memberNames: others.map((o) => o.name),
+    // { id, name, avatar-filename } for each of the OTHER members
+    members: others,
   };
 }
 
@@ -286,3 +293,57 @@ routerAdd('POST', '/api/kinly/video-token', (e) => {
   const token = $security.createJWT(payload, apiSecret, 60 * 60 * 4);
   return e.json(200, { token: token, url: url });
 });
+
+// ===========================================================================
+// Push notifications — when a message is created, notify the other members
+// via Expo's push service. Requires each user to have registered a pushToken.
+// ===========================================================================
+
+onRecordAfterCreateSuccess((e) => {
+  try {
+    const msg = e.record;
+    const conv = $app.findRecordById('conversations', msg.getString('conversation'));
+    const isGroup = conv.getBool('isGroup');
+    const authorId = msg.getString('author');
+    let authorName = 'Someone';
+    try {
+      authorName = $app.findRecordById('users', authorId).getString('name') || authorName;
+    } catch (_) {}
+
+    const title = isGroup ? conv.getString('title') || 'New message' : authorName;
+    const body = (isGroup ? authorName + ': ' : '') + msg.getString('text');
+
+    const memberIds = conv.get('members') || [];
+    const messages = [];
+    for (const id of memberIds) {
+      if (id === authorId) continue;
+      let token = '';
+      try {
+        token = $app.findRecordById('users', id).getString('pushToken');
+      } catch (_) {}
+      if (token) {
+        messages.push({
+          to: token,
+          title: title,
+          body: body,
+          sound: 'default',
+          data: { conversationId: conv.id },
+        });
+      }
+    }
+
+    if (messages.length > 0) {
+      $http.send({
+        url: 'https://exp.host/--/api/v2/push/send',
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify(messages),
+        timeout: 20,
+      });
+    }
+  } catch (err) {
+    $app.logger().error('push notify failed', 'error', String(err));
+  }
+
+  e.next();
+}, 'messages');

@@ -88,7 +88,7 @@ export default function NewGroup() {
               onPress={() => toggle(p.id)}
               style={({ pressed }) => [styles.row, pressed && styles.dim]}
             >
-              <Avatar name={p.name} size={54} />
+              <Avatar name={p.name} size={54} uri={p.avatar} />
               <Text style={styles.name}>{p.name}</Text>
               <Ionicons
                 name={picked[p.id] ? 'checkmark-circle' : 'ellipse-outline'}

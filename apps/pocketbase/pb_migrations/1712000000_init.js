@@ -13,16 +13,15 @@
  */
 migrate(
   (app) => {
-    // --- users: add a unique phone --------------------------------------
+    // --- users: add phone + push token; let people view each other ------
     const users = app.findCollectionByNameOrId('users');
-    users.fields.add(
-      new Field({
-        type: 'text',
-        name: 'phone',
-        max: 40,
-      }),
-    );
+    users.fields.add(new Field({ type: 'text', name: 'phone', max: 40 }));
+    users.fields.add(new Field({ type: 'text', name: 'pushToken', max: 300 }));
     users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
+    // Any signed-in user can view a user record (needed to show names & photos
+    // of the people you chat with). You can only change your own record.
+    users.viewRule = '@request.auth.id != ""';
+    users.updateRule = 'id = @request.auth.id';
     app.save(users);
 
     // --- conversations --------------------------------------------------

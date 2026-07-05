@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
 import React from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../src/components/Avatar';
-import { serverEnabled } from '../../src/api/pocketbase';
+import { myAvatarUrl, serverEnabled } from '../../src/api/pocketbase';
 import { useAuth } from '../../src/auth/AuthContext';
 import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
 
@@ -18,6 +19,7 @@ type Row = {
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user, signOut } = useAuth();
   const online = serverEnabled();
   const version = Constants.expoConfig?.version ?? '1.0.0';
@@ -67,11 +69,23 @@ export default function Settings() {
 
   return (
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
-      <View style={styles.profile}>
-        <Avatar name={user?.name || 'You'} size={84} />
+      <Pressable
+        accessibilityRole={user ? 'button' : 'text'}
+        accessibilityLabel={user ? 'Edit your profile' : undefined}
+        onPress={user ? () => router.push('/profile') : undefined}
+        disabled={!user}
+        style={({ pressed }) => [styles.profile, pressed && user && styles.pressed]}
+      >
+        <Avatar name={user?.name || 'You'} size={84} uri={user ? myAvatarUrl() : undefined} />
         <Text style={styles.profileName}>{user?.name || 'You'}</Text>
         <Text style={styles.profileSub}>{user?.phone || user?.email || 'Kinly member'}</Text>
-      </View>
+        {user ? (
+          <View style={styles.editPill}>
+            <Ionicons name="pencil" size={16} color={colors.primary} />
+            <Text style={styles.editText}>Edit profile</Text>
+          </View>
+        ) : null}
+      </Pressable>
 
       <View style={styles.card}>
         {rows.map((row, i) => (
@@ -123,6 +137,19 @@ const styles = StyleSheet.create({
   },
   signOutText: { fontSize: fonts.button, fontWeight: '800', color: colors.danger },
   profile: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.md },
+  editPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.background,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  editText: { fontSize: fonts.small, fontWeight: '700', color: colors.primary },
   profileName: { fontSize: fonts.title, fontWeight: '800', color: colors.text, marginTop: spacing.sm },
   profileSub: { fontSize: fonts.body, color: colors.textMuted },
 

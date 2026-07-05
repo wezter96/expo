@@ -59,7 +59,7 @@ export default function Messages() {
                 onPress={() => router.push(`/chat/${contact.id}`)}
                 style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
               >
-                <Avatar name={contact.name} isGroup={contact.isGroup} size={64} />
+                <Avatar name={contact.name} isGroup={contact.isGroup} uri={contact.avatar} size={64} />
                 <View style={styles.rowText}>
                   <Text style={styles.name} numberOfLines={1}>
                     {contact.name}

@@ -53,8 +53,42 @@ export function currentUserId(): string | null {
   return pb?.authStore.record?.id ?? null;
 }
 
+/** URL of the signed-in user's own profile photo, if any. */
+export function myAvatarUrl(): string | undefined {
+  const r = pb?.authStore.record;
+  if (!r || !r.avatar) return undefined;
+  return `${PB_URL}/api/files/users/${r.id}/${r.avatar as string}`;
+}
+
+/** Update the signed-in user's display name and (optionally) profile photo. */
+export async function updateProfile(name: string, imageUri?: string): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  const id = pb.authStore.record.id;
+  const form = new FormData();
+  form.append('name', name.trim());
+  if (imageUri) {
+    const filename = imageUri.split('/').pop() || 'avatar.jpg';
+    const ext = (filename.split('.').pop() || 'jpg').toLowerCase();
+    // React Native FormData file shape:
+    form.append('avatar', { uri: imageUri, name: filename, type: `image/${ext === 'jpg' ? 'jpeg' : ext}` } as unknown as Blob);
+  }
+  await pb.collection('users').update(id, form);
+  await pb.collection('users').authRefresh();
+}
+
+/** Save this device's Expo push token to the user's record. */
+export async function savePushToken(token: string): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  try {
+    await pb.collection('users').update(pb.authStore.record.id, { pushToken: token });
+  } catch {
+    // non-fatal
+  }
+}
+
 // --- mappers --------------------------------------------------------------
 
+type MemberDTO = { id: string; name: string; avatar: string };
 type ConversationDTO = {
   id: string;
   name: string;
@@ -62,9 +96,21 @@ type ConversationDTO = {
   phone: string;
   isGroup: boolean;
   memberNames: string[];
+  members: MemberDTO[];
 };
 
+/** Build a public file URL for a PocketBase record file field. */
+function fileUrl(collection: string, recordId: string, filename: string): string | undefined {
+  if (!filename || !PB_URL) return undefined;
+  return `${PB_URL}/api/files/${collection}/${recordId}/${filename}`;
+}
+
 function toContact(c: ConversationDTO): Contact {
+  const members = (c.members ?? []).map((m) => ({
+    id: m.id,
+    name: m.name,
+    avatar: fileUrl('users', m.id, m.avatar),
+  }));
   return {
     id: c.id,
     name: c.name,
@@ -72,6 +118,8 @@ function toContact(c: ConversationDTO): Contact {
     phone: c.phone,
     isGroup: c.isGroup,
     memberNames: c.memberNames,
+    avatar: c.isGroup ? undefined : members[0]?.avatar,
+    members,
   };
 }
 
@@ -81,13 +129,14 @@ function toMessage(r: RecordModel, meId: string | null): Message {
     contactId: r.conversation as string,
     text: r.text as string,
     mine: !!meId && r.author === meId,
+    authorId: r.author as string,
     at: r.created ? Date.parse(r.created as string) : Date.now(),
   };
 }
 
 // --- people ---------------------------------------------------------------
 
-export type KnownPerson = { id: string; name: string; phone: string };
+export type KnownPerson = { id: string; name: string; phone: string; avatar?: string };
 
 /** All conversations for the signed-in user, mapped for the UI. */
 export async function fetchContacts(): Promise<Contact[] | null> {
@@ -104,7 +153,11 @@ export async function fetchContacts(): Promise<Contact[] | null> {
 export async function fetchKnownPeople(): Promise<KnownPerson[]> {
   if (!pb || !pb.authStore.isValid) return [];
   try {
-    return await pb.send<KnownPerson[]>('/api/kinly/contacts', { method: 'GET' });
+    const rows = await pb.send<{ id: string; name: string; phone: string; avatar: string }[]>(
+      '/api/kinly/contacts',
+      { method: 'GET' }
+    );
+    return rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, avatar: fileUrl('users', r.id, r.avatar) }));
   } catch {
     return [];
   }

@@ -98,7 +98,17 @@ export default function Chat() {
         data={messages}
         keyExtractor={(m) => m.id}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => <Bubble message={item} onSpeak={speak} />}
+        renderItem={({ item }) => (
+          <Bubble
+            message={item}
+            onSpeak={speak}
+            senderName={
+              contact.isGroup && !item.mine
+                ? contact.members?.find((m) => m.id === item.authorId)?.name
+                : undefined
+            }
+          />
+        )}
         ListEmptyComponent={
           <Text style={styles.empty}>Say hello! Type a message below to start.</Text>
         }
@@ -132,7 +142,15 @@ export default function Chat() {
   );
 }
 
-function Bubble({ message, onSpeak }: { message: Message; onSpeak: (t: string) => void }) {
+function Bubble({
+  message,
+  onSpeak,
+  senderName,
+}: {
+  message: Message;
+  onSpeak: (t: string) => void;
+  senderName?: string;
+}) {
   const mine = message.mine;
   return (
     <View style={[styles.bubbleRow, mine ? styles.rowMine : styles.rowTheirs]}>
@@ -142,6 +160,7 @@ function Bubble({ message, onSpeak }: { message: Message; onSpeak: (t: string) =
         onLongPress={() => onSpeak(message.text)}
         style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}
       >
+        {senderName ? <Text style={styles.sender}>{senderName}</Text> : null}
         <Text style={[styles.bubbleText, mine ? styles.textMine : styles.textTheirs]}>
           {message.text}
         </Text>
@@ -178,6 +197,7 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '82%', borderRadius: radius.lg, padding: spacing.md },
   bubbleMine: { backgroundColor: colors.bubbleMine, borderBottomRightRadius: radius.sm },
   bubbleTheirs: { backgroundColor: colors.bubbleTheirs, borderBottomLeftRadius: radius.sm },
+  sender: { fontSize: fonts.small - 1, fontWeight: '800', color: colors.primary, marginBottom: 2 },
   bubbleText: { fontSize: fonts.body + 1, lineHeight: fonts.body + 9 },
   textMine: { color: colors.textOnDark },
   textTheirs: { color: colors.text },
