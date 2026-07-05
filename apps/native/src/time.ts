@@ -17,3 +17,12 @@ export function relativeTime(at: number): string {
 export function clockTime(at: number): string {
   return new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
+
+/** "Online" if seen in the last ~90s, else "last seen …", or "" if unknown. */
+export function presenceLabel(lastSeenIso?: string): string {
+  if (!lastSeenIso) return '';
+  const at = Date.parse(lastSeenIso);
+  if (Number.isNaN(at)) return '';
+  if (Date.now() - at < 90 * 1000) return 'Online';
+  return `last seen ${relativeTime(at).toLowerCase()}`;
+}

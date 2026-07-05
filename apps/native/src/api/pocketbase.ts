@@ -88,7 +88,7 @@ export async function savePushToken(token: string): Promise<void> {
 
 // --- mappers --------------------------------------------------------------
 
-type MemberDTO = { id: string; name: string; avatar: string };
+type MemberDTO = { id: string; name: string; avatar: string; lastSeen?: string };
 type ConversationDTO = {
   id: string;
   name: string;
@@ -110,6 +110,7 @@ function toContact(c: ConversationDTO): Contact {
     id: m.id,
     name: m.name,
     avatar: fileUrl('users', m.id, m.avatar),
+    lastSeen: m.lastSeen,
   }));
   return {
     id: c.id,
@@ -273,6 +274,97 @@ export async function subscribeMessages(onChange: (message: Message) => void): P
     };
   } catch {
     return () => {};
+  }
+}
+
+// --- reactions ------------------------------------------------------------
+
+export type Reaction = { id: string; messageId: string; userId: string; emoji: string };
+
+export async function fetchReactions(conversationId: string): Promise<Reaction[]> {
+  if (!pb || !pb.authStore.isValid) return [];
+  try {
+    const rows = await pb.collection('reactions').getFullList({
+      filter: pb.filter('message.conversation = {:c}', { c: conversationId }),
+    });
+    return rows.map((r) => ({ id: r.id, messageId: r.message as string, userId: r.user as string, emoji: r.emoji as string }));
+  } catch {
+    return [];
+  }
+}
+
+/** Toggle the current user's reaction on a message. */
+export async function setReaction(messageId: string, emoji: string, existing?: Reaction): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  try {
+    if (existing) {
+      if (existing.emoji === emoji) await pb.collection('reactions').delete(existing.id);
+      else await pb.collection('reactions').update(existing.id, { emoji });
+    } else {
+      await pb.collection('reactions').create({ message: messageId, user: pb.authStore.record.id, emoji });
+    }
+  } catch {
+    // best-effort
+  }
+}
+
+// --- read receipts --------------------------------------------------------
+
+export type Read = { userId: string; at: number };
+
+export async function fetchReads(conversationId: string): Promise<Read[]> {
+  if (!pb || !pb.authStore.isValid) return [];
+  try {
+    const rows = await pb.collection('reads').getFullList({
+      filter: pb.filter('conversation = {:c}', { c: conversationId }),
+    });
+    return rows.map((r) => ({ userId: r.user as string, at: r.lastReadAt ? Date.parse(r.lastReadAt as string) : 0 }));
+  } catch {
+    return [];
+  }
+}
+
+/** Record that the current user has read a conversation up to now (server-side, for "Seen"). */
+export async function markConversationRead(conversationId: string): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  const me = pb.authStore.record.id;
+  const now = new Date().toISOString();
+  try {
+    const existing = await pb
+      .collection('reads')
+      .getFirstListItem(pb.filter('conversation = {:c} && user = {:u}', { c: conversationId, u: me }));
+    await pb.collection('reads').update(existing.id, { lastReadAt: now });
+  } catch {
+    try {
+      await pb.collection('reads').create({ conversation: conversationId, user: me, lastReadAt: now });
+    } catch {
+      // best-effort
+    }
+  }
+}
+
+/** Subscribe to a collection's changes (reactions / reads), calling back on any event. */
+export async function subscribeCollection(collection: string, onChange: () => void): Promise<() => void> {
+  if (!pb || !pb.authStore.isValid || typeof globalThis.EventSource === 'undefined') return () => {};
+  try {
+    await pb.collection(collection).subscribe('*', () => onChange());
+    return () => {
+      pb.collection(collection).unsubscribe('*').catch(() => {});
+    };
+  } catch {
+    return () => {};
+  }
+}
+
+// --- presence -------------------------------------------------------------
+
+/** Update the current user's "last seen" timestamp (call periodically while active). */
+export async function heartbeat(): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  try {
+    await pb.collection('users').update(pb.authStore.record.id, { lastSeen: new Date().toISOString() });
+  } catch {
+    // best-effort
   }
 }
 

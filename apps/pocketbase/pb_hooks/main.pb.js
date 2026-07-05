@@ -12,9 +12,10 @@ function userBrief(id) {
       name: u.getString('name') || u.getString('email') || 'Someone',
       phone: u.getString('phone') || '',
       avatar: u.getString('avatar') || '',
+      lastSeen: u.getString('lastSeen') || '',
     };
   } catch (_) {
-    return { id: id, name: 'Someone', phone: '', avatar: '' };
+    return { id: id, name: 'Someone', phone: '', avatar: '', lastSeen: '' };
   }
 }
 

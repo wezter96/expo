@@ -10,6 +10,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -18,8 +19,22 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  currentUserId,
+  fetchReactions,
+  fetchReads,
+  markConversationRead,
+  serverEnabled,
+  setReaction,
+  subscribeCollection,
+  type Reaction,
+  type Read,
+} from '../../src/api/pocketbase';
 import { useStore } from '../../src/store';
+import { presenceLabel } from '../../src/time';
 import { Message } from '../../src/types';
+
+const EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
 import { colors, fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
 import { clockTime } from '../../src/time';
 
@@ -32,10 +47,39 @@ export default function Chat() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [reactions, setReactions] = useState<Reaction[]>([]);
+  const [reads, setReads] = useState<Read[]>([]);
+  const [reactingTo, setReactingTo] = useState<string | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
+  const online = serverEnabled();
+  const meId = currentUserId();
 
   const contact = id ? getContact(id) : undefined;
   const messages = id ? messagesFor(id) : [];
+
+  // Reactions + read receipts (server-backed), refreshed on any change.
+  useEffect(() => {
+    if (!id || !online) return;
+    let active = true;
+    const reloadReactions = () => fetchReactions(id).then((r) => active && setReactions(r));
+    const reloadReads = () => fetchReads(id).then((r) => active && setReads(r));
+    reloadReactions();
+    reloadReads();
+    let unsubR = () => {};
+    let unsubReads = () => {};
+    subscribeCollection('reactions', reloadReactions).then((fn) => (active ? (unsubR = fn) : fn()));
+    subscribeCollection('reads', reloadReads).then((fn) => (active ? (unsubReads = fn) : fn()));
+    return () => {
+      active = false;
+      unsubR();
+      unsubReads();
+    };
+  }, [id, online]);
+
+  // Record a server-side read receipt when the chat is open / new messages arrive.
+  useEffect(() => {
+    if (id && online) markConversationRead(id);
+  }, [id, online, messages.length]);
 
   useEffect(() => {
     // Keep the newest message in view.
@@ -123,6 +167,31 @@ export default function Chat() {
     ]);
   }
 
+  function toggleReaction(messageId: string, emoji: string) {
+    const mine = reactions.find((r) => r.messageId === messageId && r.userId === meId);
+    setReaction(messageId, emoji, mine);
+    setReactingTo(null);
+  }
+
+  // Presence subtitle for the header.
+  const other = !contact.isGroup ? contact.members?.[0] : undefined;
+  const presence = contact.isGroup
+    ? `${(contact.members?.length ?? 0) + 1} people`
+    : presenceLabel(other?.lastSeen);
+
+  // "Seen" on the last message I sent.
+  const lastMine = [...messages].reverse().find((m) => m.mine);
+  let seenLabel = '';
+  if (lastMine && online) {
+    if (contact.isGroup) {
+      const n = reads.filter((r) => r.userId !== meId && r.at >= lastMine.at).length;
+      if (n > 0) seenLabel = `Seen by ${n}`;
+    } else if (other) {
+      const rd = reads.find((r) => r.userId === other.id);
+      if (rd && rd.at >= lastMine.at) seenLabel = 'Seen';
+    }
+  }
+
   function speak(text: string) {
     Speech.stop();
     Speech.speak(text, { rate: 0.95 });
@@ -136,7 +205,14 @@ export default function Chat() {
     >
       <Stack.Screen
         options={{
-          title: contact.name,
+          headerTitle: () => (
+            <View style={styles.headerTitle}>
+              <Text style={styles.headerName} numberOfLines={1}>
+                {contact.name}
+              </Text>
+              {presence ? <Text style={styles.headerPresence}>{presence}</Text> : null}
+            </View>
+          ),
           headerRight: () => (
             <View style={styles.headerActions}>
               <Pressable
@@ -172,12 +248,34 @@ export default function Chat() {
                 ? contact.members?.find((m) => m.id === item.authorId)?.name
                 : undefined
             }
+            reactions={groupReactions(reactions.filter((r) => r.messageId === item.id), meId)}
+            canReact={online}
+            onLongPress={() => (online ? setReactingTo(item.id) : speak(item.text))}
+            onTapReaction={(emoji) => online && toggleReaction(item.id, emoji)}
           />
         )}
         ListEmptyComponent={
           <Text style={styles.empty}>Say hello! Type a message below to start.</Text>
         }
+        ListFooterComponent={seenLabel ? <Text style={styles.seen}>{seenLabel}</Text> : null}
       />
+
+      <Modal visible={!!reactingTo} transparent animationType="fade" onRequestClose={() => setReactingTo(null)}>
+        <Pressable style={styles.pickerBackdrop} onPress={() => setReactingTo(null)}>
+          <View style={styles.pickerCard}>
+            {EMOJIS.map((e) => (
+              <Pressable
+                key={e}
+                accessibilityLabel={`React ${e}`}
+                onPress={() => reactingTo && toggleReaction(reactingTo, e)}
+                style={({ pressed }) => [styles.pickerEmojiWrap, pressed && styles.pressed]}
+              >
+                <Text style={styles.pickerEmoji}>{e}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
 
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
         {recording ? (
@@ -246,22 +344,45 @@ export default function Chat() {
   );
 }
 
+type GroupedReaction = { emoji: string; count: number; mine: boolean };
+
+function groupReactions(list: Reaction[], meId: string | null): GroupedReaction[] {
+  const map = new Map<string, GroupedReaction>();
+  for (const r of list) {
+    const g = map.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false };
+    g.count += 1;
+    if (r.userId === meId) g.mine = true;
+    map.set(r.emoji, g);
+  }
+  return Array.from(map.values());
+}
+
 function Bubble({
   message,
   onSpeak,
   senderName,
+  reactions,
+  canReact,
+  onLongPress,
+  onTapReaction,
 }: {
   message: Message;
   onSpeak: (t: string) => void;
   senderName?: string;
+  reactions: GroupedReaction[];
+  canReact: boolean;
+  onLongPress: () => void;
+  onTapReaction: (emoji: string) => void;
 }) {
   const mine = message.mine;
   return (
     <View style={[styles.bubbleRow, mine ? styles.rowMine : styles.rowTheirs]}>
+      <View style={styles.bubbleCol}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Read message aloud: ${message.text}`}
-        onLongPress={() => onSpeak(message.text)}
+        accessibilityLabel={canReact ? 'Hold to react' : `Read message aloud: ${message.text}`}
+        onLongPress={onLongPress}
+        delayLongPress={300}
         style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}
       >
         {senderName ? <Text style={styles.sender}>{senderName}</Text> : null}
@@ -295,6 +416,25 @@ function Bubble({
           )}
         </View>
       </Pressable>
+
+      {reactions.length > 0 ? (
+        <View style={[styles.reactions, mine ? styles.reactionsMine : styles.reactionsTheirs]}>
+          {reactions.map((g) => (
+            <Pressable
+              key={g.emoji}
+              accessibilityLabel={`${g.emoji} ${g.count}`}
+              onPress={() => onTapReaction(g.emoji)}
+              style={[styles.chip, g.mine && styles.chipMine]}
+            >
+              <Text style={styles.chipText}>
+                {g.emoji}
+                {g.count > 1 ? ` ${g.count}` : ''}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      </View>
     </View>
   );
 }
@@ -302,6 +442,38 @@ function Bubble({
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingRight: spacing.xs },
+  headerTitle: { alignItems: 'flex-start' },
+  headerName: { color: colors.textOnDark, fontSize: fonts.heading, fontWeight: '800' },
+  headerPresence: { color: '#D6E5F5', fontSize: fonts.small - 2, fontWeight: '600' },
+  seen: { alignSelf: 'flex-end', fontSize: fonts.small - 2, color: colors.textMuted, fontWeight: '700', marginTop: 2 },
+
+  bubbleCol: { maxWidth: '82%' },
+  reactions: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: -6 },
+  reactionsMine: { justifyContent: 'flex-end' },
+  reactionsTheirs: { justifyContent: 'flex-start' },
+  chip: {
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  chipMine: { borderColor: colors.primary, backgroundColor: '#E6EEF7' },
+  chipText: { fontSize: fonts.small },
+
+  pickerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center' },
+  pickerCard: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    backgroundColor: colors.card,
+    borderRadius: radius.pill,
+    padding: spacing.sm,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  pickerEmojiWrap: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  pickerEmoji: { fontSize: 34 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   missing: { fontSize: fonts.body, color: colors.textMuted, textAlign: 'center' },
   listContent: { padding: spacing.md, gap: spacing.sm, flexGrow: 1 },
@@ -310,7 +482,7 @@ const styles = StyleSheet.create({
   bubbleRow: { flexDirection: 'row' },
   rowMine: { justifyContent: 'flex-end' },
   rowTheirs: { justifyContent: 'flex-start' },
-  bubble: { maxWidth: '82%', borderRadius: radius.lg, padding: spacing.md },
+  bubble: { borderRadius: radius.lg, padding: spacing.md },
   bubbleMine: { backgroundColor: colors.bubbleMine, borderBottomRightRadius: radius.sm },
   bubbleTheirs: { backgroundColor: colors.bubbleTheirs, borderBottomLeftRadius: radius.sm },
   sender: { fontSize: fonts.small - 1, fontWeight: '800', color: colors.primary, marginBottom: 2 },

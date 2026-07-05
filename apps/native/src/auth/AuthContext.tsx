@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { loadStoredAuth, pb, serverEnabled } from '../api/pocketbase';
+import { heartbeat, loadStoredAuth, pb, serverEnabled } from '../api/pocketbase';
 import { registerForPush } from '../push';
 
 export type KinlyUser = { id: string; name: string; email: string; phone: string };
@@ -56,6 +56,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       active = false;
     };
   }, []);
+
+  // Presence: keep "last seen" fresh while signed in.
+  useEffect(() => {
+    if (!user) return;
+    heartbeat();
+    const timer = setInterval(heartbeat, 45000);
+    return () => clearInterval(timer);
+  }, [user]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!pb) throw new Error('No server configured.');

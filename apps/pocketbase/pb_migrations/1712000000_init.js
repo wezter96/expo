@@ -17,6 +17,7 @@ migrate(
     const users = app.findCollectionByNameOrId('users');
     users.fields.add(new Field({ type: 'text', name: 'phone', max: 40 }));
     users.fields.add(new Field({ type: 'text', name: 'pushToken', max: 300 }));
+    users.fields.add(new Field({ type: 'date', name: 'lastSeen' }));
     users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
     // Any signed-in user can view a user record (needed to show names & photos
     // of the people you chat with). You can only change your own record.
@@ -100,9 +101,46 @@ migrate(
       indexes: ['CREATE INDEX idx_messages_conversation ON messages (conversation, created)'],
     });
     app.save(messages);
+
+    // --- reactions (one emoji per user per message) ---------------------
+    const reactions = new Collection({
+      type: 'base',
+      name: 'reactions',
+      listRule: '@request.auth.id != "" && message.conversation.members.id ?= @request.auth.id',
+      viewRule: '@request.auth.id != "" && message.conversation.members.id ?= @request.auth.id',
+      createRule: '@request.auth.id != "" && user.id ?= @request.auth.id && message.conversation.members.id ?= @request.auth.id',
+      updateRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      deleteRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      fields: [
+        { type: 'relation', name: 'message', required: true, cascadeDelete: true, maxSelect: 1, collectionId: messages.id },
+        { type: 'relation', name: 'user', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        { type: 'text', name: 'emoji', required: true, max: 8 },
+        { type: 'autodate', name: 'created', onCreate: true },
+      ],
+      indexes: ['CREATE UNIQUE INDEX idx_reactions_msg_user ON reactions (message, user)'],
+    });
+    app.save(reactions);
+
+    // --- reads (per-user last-read time, for "Seen") --------------------
+    const reads = new Collection({
+      type: 'base',
+      name: 'reads',
+      listRule: '@request.auth.id != "" && conversation.members.id ?= @request.auth.id',
+      viewRule: '@request.auth.id != "" && conversation.members.id ?= @request.auth.id',
+      createRule: '@request.auth.id != "" && user.id ?= @request.auth.id && conversation.members.id ?= @request.auth.id',
+      updateRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      deleteRule: null,
+      fields: [
+        { type: 'relation', name: 'conversation', required: true, cascadeDelete: true, maxSelect: 1, collectionId: conversations.id },
+        { type: 'relation', name: 'user', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        { type: 'date', name: 'lastReadAt' },
+      ],
+      indexes: ['CREATE UNIQUE INDEX idx_reads_conv_user ON reads (conversation, user)'],
+    });
+    app.save(reads);
   },
   (app) => {
-    for (const name of ['messages', 'conversations']) {
+    for (const name of ['reactions', 'reads', 'messages', 'conversations']) {
       try {
         app.delete(app.findCollectionByNameOrId(name));
       } catch (_) {
