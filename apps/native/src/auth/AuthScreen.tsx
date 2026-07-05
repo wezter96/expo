@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { requestPasswordReset } from '../api/pocketbase';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../theme';
 import { useTheme } from '../theme-context';
 import { useAuth } from './AuthContext';
@@ -46,6 +48,19 @@ export function AuthScreen() {
       setError(msg.replace('Failed to authenticate.', 'That email or password was not right.'));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const forgot = async () => {
+    if (!email.trim()) {
+      Alert.alert('Reset password', 'Please type your email address first, then tap "Forgot password".');
+      return;
+    }
+    try {
+      await requestPasswordReset(email);
+      Alert.alert('Check your email', `We've sent a link to reset your password to ${email.trim()}.`);
+    } catch {
+      Alert.alert('Reset password', 'Could not send a reset email right now. Please try again later.');
     }
   };
 
@@ -110,6 +125,12 @@ export function AuthScreen() {
             <Text style={styles.primaryText}>{mode === 'signin' ? 'Sign in' : 'Create account'}</Text>
           )}
         </Pressable>
+
+        {mode === 'signin' ? (
+          <Pressable accessibilityRole="button" onPress={forgot} style={styles.switch}>
+            <Text style={styles.switchText}>Forgot password?</Text>
+          </Pressable>
+        ) : null}
 
         <Pressable
           accessibilityRole="button"

@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchContacts,
   fetchMessages,
+  newId,
   pushMessage,
   pushPhoto,
   pushVoice,
@@ -33,6 +34,8 @@ type Store = {
   sendMessage: (contactId: string, text: string) => void;
   sendPhoto: (contactId: string, uri: string, caption?: string) => void;
   sendVoice: (contactId: string, uri: string, duration: number) => void;
+  /** Retry a message that failed to send. */
+  retryMessage: (id: string) => void;
   /** Simulate an incoming reply (used to make the demo feel alive). */
   receiveMessage: (contactId: string, text: string) => Message;
   /** Re-pull conversations & messages from the server (after adding a person/group). */
@@ -66,6 +69,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const [state, setState] = useState<State>({ contacts: [], messages: [] });
   const [ready, setReady] = useState(false);
+  // Live view of messages for callbacks that shouldn't re-bind on every change.
+  const messagesRef = useRef(state.messages);
+  messagesRef.current = state.messages;
   // Per-conversation "read up to" timestamps (epoch millis), persisted locally.
   const [reads, setReads] = useState<Record<string, number>>({});
 
@@ -219,17 +225,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [state.messages]
   );
 
-  // Add a message to the local store (offline mode, or an incoming demo message).
+  // Add a message to the local store (accepts an explicit id so an optimistic
+  // send and its realtime echo share the same id and dedupe).
   const addLocal = useCallback(
     (contactId: string, partial: Partial<Message> & { mine: boolean }): Message => {
+      const { id: pid, ...rest } = partial;
       const msg: Message = {
-        id: nextId('m'),
+        id: pid ?? nextId('m'),
         contactId,
         text: '',
         kind: 'text',
         at: Date.now(),
         authorId: uid ?? 'me',
-        ...partial,
+        ...rest,
       };
       setState((s) => ({ ...s, messages: [...s.messages, msg] }));
       return msg;
@@ -237,30 +245,71 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [uid]
   );
 
-  // When online, we DON'T add locally — PocketBase realtime echoes the message
-  // back (to the sender too), which avoids duplicates. Offline, we add locally.
+  const setMessageStatus = useCallback((id: string, status: Message['status']) => {
+    setState((s) => ({ ...s, messages: s.messages.map((m) => (m.id === id ? { ...m, status } : m)) }));
+  }, []);
+
+  // Optimistic send: add the message immediately (so it appears instantly),
+  // then push to the server. On failure it's marked "failed" (tap to retry).
+  // Online: a client id is used so the realtime echo replaces the optimistic
+  // copy by id. Offline: it just lives in the local store.
+  const dispatchSend = useCallback(
+    (contactId: string, partial: Partial<Message>, push: (id: string) => Promise<boolean>) => {
+      const wired = online && uid;
+      const id = wired ? newId() : nextId('m');
+      addLocal(contactId, { ...partial, id, mine: true, status: wired ? 'sending' : undefined });
+      if (wired) {
+        push(id).then((ok) => {
+          if (!ok) setMessageStatus(id, 'failed');
+        });
+      }
+    },
+    [online, uid, addLocal, setMessageStatus]
+  );
+
   const sendMessage = useCallback(
     (contactId: string, text: string) => {
-      if (online && uid) void pushMessage(contactId, text);
-      else addLocal(contactId, { text: text.trim(), kind: 'text', mine: true });
+      const body = text.trim();
+      dispatchSend(contactId, { text: body, kind: 'text' }, (id) => pushMessage(id, contactId, body));
     },
-    [online, uid, addLocal]
+    [dispatchSend]
   );
 
   const sendPhoto = useCallback(
     (contactId: string, uri: string, caption = '') => {
-      if (online && uid) void pushPhoto(contactId, uri, caption);
-      else addLocal(contactId, { text: caption, kind: 'photo', mine: true, imageUrl: uri });
+      dispatchSend(contactId, { text: caption, kind: 'photo', imageUrl: uri }, (id) =>
+        pushPhoto(id, contactId, uri, caption)
+      );
     },
-    [online, uid, addLocal]
+    [dispatchSend]
   );
 
   const sendVoice = useCallback(
     (contactId: string, uri: string, duration: number) => {
-      if (online && uid) void pushVoice(contactId, uri, duration);
-      else addLocal(contactId, { kind: 'voice', mine: true, audioUrl: uri, duration });
+      dispatchSend(contactId, { kind: 'voice', audioUrl: uri, duration }, (id) =>
+        pushVoice(id, contactId, uri, duration)
+      );
     },
-    [online, uid, addLocal]
+    [dispatchSend]
+  );
+
+  const retryMessage = useCallback(
+    (id: string) => {
+      if (!(online && uid)) return;
+      const m = messagesRef.current.find((x) => x.id === id);
+      if (!m) return;
+      setMessageStatus(id, 'sending');
+      const push =
+        m.kind === 'photo' && m.imageUrl
+          ? pushPhoto(id, m.contactId, m.imageUrl, m.text)
+          : m.kind === 'voice' && m.audioUrl
+            ? pushVoice(id, m.contactId, m.audioUrl, m.duration ?? 0)
+            : pushMessage(id, m.contactId, m.text);
+      push.then((ok) => {
+        if (!ok) setMessageStatus(id, 'failed');
+      });
+    },
+    [online, uid, setMessageStatus]
   );
 
   const receiveMessage = useCallback(
@@ -308,6 +357,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     sendMessage,
     sendPhoto,
     sendVoice,
+    retryMessage,
     receiveMessage,
     refresh,
     unreadCount,

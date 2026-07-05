@@ -40,14 +40,17 @@ import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/
 import { useTheme } from '../../src/theme-context';
 
 const EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+const URL_RE = /(https?:\/\/|www\.)\S+/i;
 import { clockTime } from '../../src/time';
 
 export default function Chat() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { getContact, messagesFor, sendMessage, sendPhoto, sendVoice, markRead } = useStore();
+  const { getContact, messagesFor, sendMessage, sendPhoto, sendVoice, retryMessage, markRead, isFavorite, toggleFavorite } =
+    useStore();
   const [draft, setDraft] = useState('');
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -240,6 +243,17 @@ export default function Chat() {
               >
                 <Ionicons name="videocam" size={30} color={colors.textOnDark} />
               </Pressable>
+              <Pressable
+                accessibilityLabel={isFavorite(contact.id) ? 'Remove favorite' : 'Add to favorites'}
+                onPress={() => toggleFavorite(contact.id)}
+                hitSlop={12}
+              >
+                <Ionicons
+                  name={isFavorite(contact.id) ? 'star' : 'star-outline'}
+                  size={26}
+                  color={isFavorite(contact.id) ? colors.warning : colors.textOnDark}
+                />
+              </Pressable>
               {contact.isGroup ? (
                 <Pressable
                   accessibilityLabel="Group settings"
@@ -271,7 +285,10 @@ export default function Chat() {
             reactions={groupReactions(reactions.filter((r) => r.messageId === item.id), meId)}
             canReact={online}
             onLongPress={() => (online ? setReactingTo(item.id) : speak(item.text))}
+            onReact={online ? () => setReactingTo(item.id) : undefined}
             onTapReaction={(emoji) => online && toggleReaction(item.id, emoji)}
+            onRetry={() => retryMessage(item.id)}
+            onViewPhoto={setViewingPhoto}
           />
         )}
         ListEmptyComponent={
@@ -294,6 +311,19 @@ export default function Chat() {
               </Pressable>
             ))}
           </View>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={!!viewingPhoto} transparent animationType="fade" onRequestClose={() => setViewingPhoto(null)}>
+        <Pressable style={styles.photoViewer} onPress={() => setViewingPhoto(null)}>
+          {viewingPhoto ? <Image source={{ uri: viewingPhoto }} style={styles.photoFull} resizeMode="contain" /> : null}
+          <Pressable
+            accessibilityLabel="Close photo"
+            onPress={() => setViewingPhoto(null)}
+            style={[styles.photoClose, { top: insets.top + spacing.sm }]}
+          >
+            <Ionicons name="close" size={34} color={colors.textOnDark} />
+          </Pressable>
         </Pressable>
       </Modal>
 
@@ -384,7 +414,10 @@ function Bubble({
   reactions,
   canReact,
   onLongPress,
+  onReact,
   onTapReaction,
+  onRetry,
+  onViewPhoto,
 }: {
   message: Message;
   onSpeak: (t: string) => void;
@@ -392,11 +425,15 @@ function Bubble({
   reactions: GroupedReaction[];
   canReact: boolean;
   onLongPress: () => void;
+  onReact?: () => void;
   onTapReaction: (emoji: string) => void;
+  onRetry: () => void;
+  onViewPhoto: (uri: string) => void;
 }) {
   const { colors, fonts } = useTheme();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const mine = message.mine;
+  const hasLink = !mine && URL_RE.test(message.text);
   return (
     <View style={[styles.bubbleRow, mine ? styles.rowMine : styles.rowTheirs]}>
       <View style={styles.bubbleCol}>
@@ -410,7 +447,13 @@ function Bubble({
         {senderName ? <Text style={styles.sender}>{senderName}</Text> : null}
 
         {message.kind === 'photo' && message.imageUrl ? (
-          <Image source={{ uri: message.imageUrl }} style={styles.photo} resizeMode="cover" />
+          <Pressable
+            accessibilityRole="imagebutton"
+            accessibilityLabel="View photo"
+            onPress={() => message.imageUrl && onViewPhoto(message.imageUrl)}
+          >
+            <Image source={{ uri: message.imageUrl }} style={styles.photo} resizeMode="cover" />
+          </Pressable>
         ) : null}
 
         {message.kind === 'voice' ? (
@@ -423,21 +466,45 @@ function Bubble({
           </Text>
         ) : null}
 
+        {hasLink ? (
+          <View style={styles.linkWarn}>
+            <Ionicons name="warning" size={16} color={colors.warning} />
+            <Text style={styles.linkWarnText}>Contains a link — only open links from people you trust.</Text>
+          </View>
+        ) : null}
+
         <View style={styles.bubbleFooter}>
+          {mine && message.status === 'sending' ? (
+            <Ionicons name="time-outline" size={16} color="#D6E5F5" />
+          ) : null}
           <Text style={[styles.time, mine ? styles.timeMine : styles.timeTheirs]}>
             {clockTime(message.at)}
           </Text>
           {!mine && (
-            <Pressable
-              accessibilityLabel="Read this message aloud"
-              onPress={() => onSpeak(message.text)}
-              hitSlop={10}
-            >
-              <Ionicons name="volume-high" size={20} color={colors.primary} />
-            </Pressable>
+            <>
+              <Pressable
+                accessibilityLabel="Read this message aloud"
+                onPress={() => onSpeak(message.text)}
+                hitSlop={10}
+              >
+                <Ionicons name="volume-high" size={22} color={colors.primary} />
+              </Pressable>
+              {onReact ? (
+                <Pressable accessibilityLabel="React to this message" onPress={onReact} hitSlop={10}>
+                  <Ionicons name="happy-outline" size={22} color={colors.primary} />
+                </Pressable>
+              ) : null}
+            </>
           )}
         </View>
       </Pressable>
+
+      {mine && message.status === 'failed' ? (
+        <Pressable accessibilityLabel="Message not sent. Tap to try again." onPress={onRetry} style={styles.failed}>
+          <Ionicons name="alert-circle" size={16} color={colors.danger} />
+          <Text style={styles.failedText}>Not sent — tap to try again</Text>
+        </Pressable>
+      ) : null}
 
       {reactions.length > 0 ? (
         <View style={[styles.reactions, mine ? styles.reactionsMine : styles.reactionsTheirs]}>
@@ -510,6 +577,13 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   bubbleTheirs: { backgroundColor: colors.bubbleTheirs, borderBottomLeftRadius: radius.sm },
   sender: { fontSize: fonts.small - 1, fontWeight: '800', color: colors.primary, marginBottom: 2 },
   photo: { width: 220, height: 220, borderRadius: radius.md, marginBottom: 4, backgroundColor: colors.border },
+  linkWarn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  linkWarnText: { flex: 1, fontSize: fonts.small - 2, color: colors.warning, fontWeight: '700' },
+  failed: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-end', marginTop: 3 },
+  failedText: { fontSize: fonts.small - 2, color: colors.danger, fontWeight: '700' },
+  photoViewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
+  photoFull: { width: '100%', height: '80%' },
+  photoClose: { position: 'absolute', right: spacing.md },
   voiceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 2 },
   bubbleText: { fontSize: fonts.body + 1, lineHeight: fonts.body + 9 },
   textMine: { color: colors.textOnDark },

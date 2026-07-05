@@ -83,6 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         passwordConfirm: password,
       });
       await pb.collection('users').authWithPassword(email.trim(), password);
+      // Best-effort verification email (needs SMTP configured; login isn't blocked).
+      pb.collection('users').requestVerification(email.trim()).catch(() => {});
       setUser(readUser());
       void registerForPush();
     },

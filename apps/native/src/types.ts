@@ -30,6 +30,8 @@ export type Message = {
   duration?: number;
   /** true = sent by the app's user, false = received. */
   mine: boolean;
+  /** Delivery state for messages the user sent (online mode). */
+  status?: 'sending' | 'sent' | 'failed';
   /** id of the sender (used to label who spoke in group chats). */
   authorId?: string;
   /** epoch millis */

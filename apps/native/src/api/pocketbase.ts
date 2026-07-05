@@ -219,17 +219,29 @@ export async function fetchMessages(contactId: string): Promise<Message[] | null
   }
 }
 
-export async function pushMessage(contactId: string, text: string): Promise<void> {
-  if (!pb || !pb.authStore.record) return;
+const ID_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+/** A PocketBase-compatible 15-char record id, generated client-side so an
+ *  optimistic message and its realtime echo share the same id (dedupe). */
+export function newId(): string {
+  let s = '';
+  for (let i = 0; i < 15; i++) s += ID_CHARS[Math.floor(Math.random() * ID_CHARS.length)];
+  return s;
+}
+
+/** Send a text message with a client-provided id. Returns true on success. */
+export async function pushMessage(id: string, contactId: string, text: string): Promise<boolean> {
+  if (!pb || !pb.authStore.record) return false;
   try {
     await pb.collection('messages').create({
+      id,
       conversation: contactId,
       author: pb.authStore.record.id,
       kind: 'text',
       text: text.trim(),
     });
+    return true;
   } catch {
-    // offline — the local store already holds the message
+    return false;
   }
 }
 
@@ -241,10 +253,11 @@ function fileField(uri: string, field: string, fallbackName: string, mime: strin
 }
 
 /** Send a photo message. Returns true on success. */
-export async function pushPhoto(contactId: string, uri: string, caption = ''): Promise<boolean> {
+export async function pushPhoto(id: string, contactId: string, uri: string, caption = ''): Promise<boolean> {
   if (!pb || !pb.authStore.record) return false;
   try {
     const form = fileField(uri, 'image', 'photo.jpg', 'image/jpeg');
+    form.append('id', id);
     form.append('conversation', contactId);
     form.append('author', pb.authStore.record.id);
     form.append('kind', 'photo');
@@ -257,10 +270,11 @@ export async function pushPhoto(contactId: string, uri: string, caption = ''): P
 }
 
 /** Send a voice message. Returns true on success. */
-export async function pushVoice(contactId: string, uri: string, duration: number): Promise<boolean> {
+export async function pushVoice(id: string, contactId: string, uri: string, duration: number): Promise<boolean> {
   if (!pb || !pb.authStore.record) return false;
   try {
     const form = fileField(uri, 'audio', 'voice.m4a', 'audio/m4a');
+    form.append('id', id);
     form.append('conversation', contactId);
     form.append('author', pb.authStore.record.id);
     form.append('kind', 'voice');
@@ -271,6 +285,14 @@ export async function pushVoice(contactId: string, uri: string, duration: number
   } catch {
     return false;
   }
+}
+
+// --- password reset -------------------------------------------------------
+
+/** Send a password-reset email (requires SMTP configured in PocketBase). */
+export async function requestPasswordReset(email: string): Promise<void> {
+  if (!pb) throw new Error('Not connected to a server.');
+  await pb.collection('users').requestPasswordReset(email.trim());
 }
 
 /** Subscribe to new/changed messages in the user's conversations. */
