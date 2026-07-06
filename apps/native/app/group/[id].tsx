@@ -31,6 +31,12 @@ export default function GroupSettings() {
   const [title, setTitle] = useState(contact?.name ?? '');
   const [people, setPeople] = useState<KnownPerson[]>([]);
 
+  // The contact may not be in the store yet on first render; fill the name
+  // field once it loads (without clobbering an edit in progress).
+  useEffect(() => {
+    if (contact?.name) setTitle((t) => (t ? t : contact.name));
+  }, [contact?.name]);
+
   useEffect(() => {
     fetchKnownPeople().then((list) => setPeople(list.filter((p) => !currentIds.includes(p.id))));
     // eslint-disable-next-line react-hooks/exhaustive-deps

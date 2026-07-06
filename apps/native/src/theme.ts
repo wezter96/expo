@@ -67,7 +67,7 @@ export type Fonts = {
 };
 
 // Oversized type scale (base body 20 for easy reading without zooming).
-const BASE_FONTS: Fonts = { huge: 34, title: 28, heading: 24, body: 20, button: 22, small: 16 };
+export const BASE_FONTS: Fonts = { huge: 34, title: 28, heading: 24, body: 20, button: 22, small: 16 };
 
 /** Global typeface (Atkinson Hyperlegible), loaded in the root layout. */
 export const fontFamily = {
@@ -112,10 +112,32 @@ export const avatarColors = [
   '#334155',
 ];
 
-export function colorForName(name: string): string {
+// Brighter variants for use as *text* on dark surfaces, where the avatar
+// colors above are too dark to read. Same order/index as avatarColors.
+const nameColorsDark = [
+  '#7FB0EE',
+  '#4ECB8E',
+  '#F0B44E',
+  '#C79BE6',
+  '#F0897F',
+  '#4FC3D6',
+  '#E0A55E',
+  '#A9B6C6',
+];
+
+function nameIndex(name: string): number {
   let sum = 0;
   for (let i = 0; i < name.length; i++) sum += name.charCodeAt(i);
-  return avatarColors[sum % avatarColors.length];
+  return sum % avatarColors.length;
+}
+
+export function colorForName(name: string): string {
+  return avatarColors[nameIndex(name)];
+}
+
+/** A per-person color safe to use as text, brightened on dark backgrounds. */
+export function nameColorForName(name: string, dark = false): string {
+  return (dark ? nameColorsDark : avatarColors)[nameIndex(name)];
 }
 
 export function initialsForName(name: string): string {

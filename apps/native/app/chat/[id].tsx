@@ -37,7 +37,7 @@ import { useStore } from '../../src/store';
 import { presenceLabel } from '../../src/time';
 import { Message } from '../../src/types';
 
-import { colorForName, type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { type Colors, type Fonts, nameColorForName, radius, spacing, TAP_TARGET } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
 
 const EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
@@ -75,7 +75,7 @@ export default function Chat() {
   const listRef = useRef<FlatList<Message>>(null);
   const online = serverEnabled();
   const meId = currentUserId();
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const contact = id ? getContact(id) : undefined;
@@ -270,15 +270,23 @@ export default function Chat() {
   }
 
   function moreMenu() {
-    if (!other) return;
-    const blocked = isBlocked(other.id);
-    Alert.alert(contact!.name, undefined, [
-      blocked
-        ? { text: `Unblock ${contact!.name}`, onPress: () => void unblockContact(other.id) }
-        : { text: `Block ${contact!.name}`, style: 'destructive', onPress: () => confirmBlock(other.id, contact!.name) },
-      { text: 'Report to Kinly', onPress: () => confirmReport(other.id, contact!.name) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    const fav = isFavorite(contact!.id);
+    const opts: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [
+      { text: fav ? 'Remove from favorites' : 'Add to favorites', onPress: () => toggleFavorite(contact!.id) },
+    ];
+    if (contact!.isGroup) {
+      opts.push({ text: 'Group info & members', onPress: () => router.push(`/group/${contact!.id}`) });
+    } else if (other) {
+      const blocked = isBlocked(other.id);
+      opts.push(
+        blocked
+          ? { text: `Unblock ${contact!.name}`, onPress: () => void unblockContact(other.id) }
+          : { text: `Block ${contact!.name}`, style: 'destructive', onPress: () => confirmBlock(other.id, contact!.name) }
+      );
+      opts.push({ text: 'Report to Kinly', onPress: () => confirmReport(other.id, contact!.name) });
+    }
+    opts.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert(contact!.name, undefined, opts);
   }
 
   const blocked = !!other && online && isBlocked(other.id);
@@ -306,39 +314,18 @@ export default function Chat() {
                 onPress={() => beginCall('voice')}
                 hitSlop={12}
               >
-                <Ionicons name="call" size={28} color={colors.textOnDark} />
+                <Ionicons name="call" size={26} color={colors.textOnDark} />
               </Pressable>
               <Pressable
                 accessibilityLabel={`Video call ${contact.name}`}
                 onPress={() => beginCall('video')}
                 hitSlop={12}
               >
-                <Ionicons name="videocam" size={30} color={colors.textOnDark} />
+                <Ionicons name="videocam" size={28} color={colors.textOnDark} />
               </Pressable>
-              <Pressable
-                accessibilityLabel={isFavorite(contact.id) ? 'Remove favorite' : 'Add to favorites'}
-                onPress={() => toggleFavorite(contact.id)}
-                hitSlop={12}
-              >
-                <Ionicons
-                  name={isFavorite(contact.id) ? 'star' : 'star-outline'}
-                  size={26}
-                  color={isFavorite(contact.id) ? colors.warning : colors.textOnDark}
-                />
+              <Pressable accessibilityLabel="More options" onPress={moreMenu} hitSlop={12}>
+                <Ionicons name="ellipsis-vertical" size={26} color={colors.textOnDark} />
               </Pressable>
-              {contact.isGroup ? (
-                <Pressable
-                  accessibilityLabel="Group settings"
-                  onPress={() => router.push(`/group/${contact.id}`)}
-                  hitSlop={12}
-                >
-                  <Ionicons name="people" size={28} color={colors.textOnDark} />
-                </Pressable>
-              ) : (
-                <Pressable accessibilityLabel="More options" onPress={moreMenu} hitSlop={12}>
-                  <Ionicons name="ellipsis-vertical" size={26} color={colors.textOnDark} />
-                </Pressable>
-              )}
             </View>
           ),
         }}
@@ -366,7 +353,7 @@ export default function Chat() {
               groupIncoming={groupIncoming}
               firstInRun={firstInRun}
               senderName={senderName}
-              senderColor={senderName ? colorForName(senderName) : undefined}
+              senderColor={senderName ? nameColorForName(senderName, isDark) : undefined}
               senderAvatar={sender?.avatar}
               reactions={groupReactions(reactions.filter((r) => r.messageId === item.id), meId)}
               canReact={online}
@@ -662,10 +649,12 @@ function Bubble({
 function makeStyles(colors: Colors, fonts: Fonts) {
   return StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingRight: spacing.xs },
-  headerTitle: { alignItems: 'flex-start' },
-  headerName: { color: colors.textOnDark, fontSize: fonts.heading, fontWeight: '800' },
-  headerPresence: { color: '#D6E5F5', fontSize: fonts.small - 2, fontWeight: '600' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingRight: spacing.xs },
+  // Header text is a fixed, compact size and width-capped so a long name
+  // truncates instead of colliding with the action icons (even at XL text).
+  headerTitle: { alignItems: 'flex-start', maxWidth: 200 },
+  headerName: { color: colors.textOnDark, fontSize: 22, fontWeight: '800' },
+  headerPresence: { color: '#D6E5F5', fontSize: 13, fontWeight: '600' },
   seen: { alignSelf: 'flex-end', fontSize: fonts.small - 2, color: colors.textMuted, fontWeight: '700', marginTop: 2 },
 
   bubbleCol: { maxWidth: '82%' },

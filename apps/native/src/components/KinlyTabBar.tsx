@@ -101,17 +101,21 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     alignItems: 'flex-start',
     justifyContent: 'space-around',
     minHeight: BAR_HEIGHT,
+    // Reserve headroom for the raised center button so it's counted in the
+    // bar's measured height — otherwise it floats up over screen content
+    // (e.g. hiding the last Settings row).
+    paddingTop: 22,
     backgroundColor: colors.card,
     borderTopWidth: 2,
     borderTopColor: colors.border,
-    // let the raised center button overflow above the bar
+    // still let the button peek slightly above the bar for the "raised" look
     overflow: 'visible',
   },
   sideTab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xs,
     gap: 3,
   },
   sideLabel: { fontSize: fonts.small - 1, fontWeight: '700' },
@@ -132,8 +136,8 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   centerSlot: {
     flex: 1,
     alignItems: 'center',
-    // raise the whole slot so the circle floats above the bar
-    marginTop: -(CENTER_SIZE / 2),
+    // raise the circle so it peeks above the bar (bar paddingTop reserves space)
+    marginTop: -30,
   },
   centerButton: {
     width: CENTER_SIZE,
