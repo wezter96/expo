@@ -32,11 +32,12 @@ import {
   type Reaction,
   type Read,
 } from '../../src/api/pocketbase';
+import { Avatar } from '../../src/components/Avatar';
 import { useStore } from '../../src/store';
 import { presenceLabel } from '../../src/time';
 import { Message } from '../../src/types';
 
-import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { colorForName, type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
 
 const EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
@@ -348,26 +349,37 @@ export default function Chat() {
         data={messages}
         keyExtractor={(m) => m.id}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <Bubble
-            message={item}
-            onSpeak={speak}
-            senderName={
-              contact.isGroup && !item.mine
-                ? contact.members?.find((m) => m.id === item.authorId)?.name
-                : undefined
-            }
-            reactions={groupReactions(reactions.filter((r) => r.messageId === item.id), meId)}
-            canReact={online}
-            onLongPress={() =>
-              item.mine ? promptDelete(item.id) : online ? setReactingTo(item.id) : speak(item.text)
-            }
-            onReact={online ? () => setReactingTo(item.id) : undefined}
-            onTapReaction={(emoji) => online && toggleReaction(item.id, emoji)}
-            onRetry={() => retryMessage(item.id)}
-            onViewPhoto={setViewingPhoto}
-          />
-        )}
+        renderItem={({ item, index }) => {
+          // Group consecutive messages from the same person: only the first of
+          // a run shows the avatar + name, so the thread stays uncluttered.
+          const prev = index > 0 ? messages[index - 1] : undefined;
+          const groupIncoming = contact.isGroup && !item.mine;
+          const firstInRun = !prev || prev.authorId !== item.authorId || prev.mine !== item.mine;
+          const sender = groupIncoming ? contact.members?.find((m) => m.id === item.authorId) : undefined;
+          const senderName = groupIncoming ? sender?.name ?? 'Someone' : undefined;
+          // Read-aloud names the speaker in a group ("Tom says: …").
+          const spoken = senderName ? `${senderName} says: ${item.text}` : item.text;
+          return (
+            <Bubble
+              message={item}
+              onSpeak={() => speak(spoken)}
+              groupIncoming={groupIncoming}
+              firstInRun={firstInRun}
+              senderName={senderName}
+              senderColor={senderName ? colorForName(senderName) : undefined}
+              senderAvatar={sender?.avatar}
+              reactions={groupReactions(reactions.filter((r) => r.messageId === item.id), meId)}
+              canReact={online}
+              onLongPress={() =>
+                item.mine ? promptDelete(item.id) : online ? setReactingTo(item.id) : speak(spoken)
+              }
+              onReact={online ? () => setReactingTo(item.id) : undefined}
+              onTapReaction={(emoji) => online && toggleReaction(item.id, emoji)}
+              onRetry={() => retryMessage(item.id)}
+              onViewPhoto={setViewingPhoto}
+            />
+          );
+        }}
         ListEmptyComponent={
           <Text style={styles.empty}>Say hello! Type a message below to start.</Text>
         }
@@ -500,7 +512,11 @@ function groupReactions(list: Reaction[], meId: string | null): GroupedReaction[
 function Bubble({
   message,
   onSpeak,
+  groupIncoming,
+  firstInRun,
   senderName,
+  senderColor,
+  senderAvatar,
   reactions,
   canReact,
   onLongPress,
@@ -510,8 +526,12 @@ function Bubble({
   onViewPhoto,
 }: {
   message: Message;
-  onSpeak: (t: string) => void;
+  onSpeak: () => void;
+  groupIncoming?: boolean;
+  firstInRun?: boolean;
   senderName?: string;
+  senderColor?: string;
+  senderAvatar?: string;
   reactions: GroupedReaction[];
   canReact: boolean;
   onLongPress: () => void;
@@ -525,7 +545,19 @@ function Bubble({
   const mine = message.mine;
   const hasLink = !mine && URL_RE.test(message.text);
   return (
-    <View style={[styles.bubbleRow, mine ? styles.rowMine : styles.rowTheirs]}>
+    <View
+      style={[
+        styles.bubbleRow,
+        mine ? styles.rowMine : styles.rowTheirs,
+        // tighten the gap between messages in the same run
+        !firstInRun && styles.rowContinuation,
+      ]}
+    >
+      {groupIncoming ? (
+        <View style={styles.avatarCol}>
+          {firstInRun ? <Avatar name={senderName ?? 'Someone'} size={38} uri={senderAvatar} /> : null}
+        </View>
+      ) : null}
       <View style={styles.bubbleCol}>
       <Pressable
         accessibilityRole="button"
@@ -534,7 +566,9 @@ function Bubble({
         delayLongPress={300}
         style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}
       >
-        {senderName ? <Text style={styles.sender}>{senderName}</Text> : null}
+        {groupIncoming && firstInRun && senderName ? (
+          <Text style={[styles.sender, senderColor ? { color: senderColor } : null]}>{senderName}</Text>
+        ) : null}
 
         {message.kind === 'photo' && message.imageUrl ? (
           <Pressable
@@ -566,6 +600,8 @@ function Bubble({
         <View style={styles.bubbleFooter}>
           {mine && message.status === 'sending' ? (
             <Ionicons name="time-outline" size={16} color="#D6E5F5" />
+          ) : mine && message.status !== 'failed' ? (
+            <Ionicons name="checkmark" size={16} color="#D6E5F5" />
           ) : null}
           <Text style={[styles.time, mine ? styles.timeMine : styles.timeTheirs]}>
             {clockTime(message.at)}
@@ -574,7 +610,7 @@ function Bubble({
             <>
               <Pressable
                 accessibilityLabel="Read this message aloud"
-                onPress={() => onSpeak(message.text)}
+                onPress={onSpeak}
                 hitSlop={10}
               >
                 <Ionicons name="volume-high" size={22} color={colors.primary} />
@@ -590,8 +626,13 @@ function Bubble({
       </Pressable>
 
       {mine && message.status === 'failed' ? (
-        <Pressable accessibilityLabel="Message not sent. Tap to try again." onPress={onRetry} style={styles.failed}>
-          <Ionicons name="alert-circle" size={16} color={colors.danger} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Message not sent. Tap to try again."
+          onPress={onRetry}
+          style={({ pressed }) => [styles.failed, pressed && styles.pressed]}
+        >
+          <Ionicons name="refresh" size={20} color={colors.danger} />
           <Text style={styles.failedText}>Not sent — tap to try again</Text>
         </Pressable>
       ) : null}
@@ -659,9 +700,11 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   listContent: { padding: spacing.md, gap: spacing.sm, flexGrow: 1 },
   empty: { fontSize: fonts.body, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xl },
 
-  bubbleRow: { flexDirection: 'row' },
+  bubbleRow: { flexDirection: 'row', alignItems: 'flex-start' },
   rowMine: { justifyContent: 'flex-end' },
   rowTheirs: { justifyContent: 'flex-start' },
+  rowContinuation: { marginTop: -8 },
+  avatarCol: { width: 38, marginRight: spacing.xs },
   bubble: { borderRadius: radius.lg, padding: spacing.md },
   bubbleMine: { backgroundColor: colors.bubbleMine, borderBottomRightRadius: radius.sm },
   bubbleTheirs: { backgroundColor: colors.bubbleTheirs, borderBottomLeftRadius: radius.sm },
@@ -669,8 +712,21 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   photo: { width: 220, height: 220, borderRadius: radius.md, marginBottom: 4, backgroundColor: colors.border },
   linkWarn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   linkWarnText: { flex: 1, fontSize: fonts.small - 2, color: colors.warning, fontWeight: '700' },
-  failed: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-end', marginTop: 3 },
-  failedText: { fontSize: fonts.small - 2, color: colors.danger, fontWeight: '700' },
+  failed: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-end',
+    marginTop: 4,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: colors.danger,
+    backgroundColor: colors.card,
+  },
+  failedText: { fontSize: fonts.small, color: colors.danger, fontWeight: '800' },
   photoViewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
   photoFull: { width: '100%', height: '80%' },
   photoClose: { position: 'absolute', right: spacing.md },
