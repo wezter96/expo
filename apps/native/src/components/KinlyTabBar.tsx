@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { Tabs } from 'expo-router';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,7 +27,11 @@ const LABELS: Record<string, string> = {
   settings: 'Settings',
 };
 
-export function KinlyTabBar({ state, navigation }: BottomTabBarProps) {
+// SDK 57's expo-router vendors react-navigation, so we take the tab-bar prop
+// type from the Tabs component itself instead of the standalone package.
+type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
+
+export function KinlyTabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const { totalUnread } = useStore();
   const { colors, fonts } = useTheme();
