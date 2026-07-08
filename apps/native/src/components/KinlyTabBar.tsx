@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '../store';
-import { type Colors, type Fonts, spacing } from '../theme';
+import { type Colors, type Fonts, spacing, UNREAD_BADGE } from '../theme';
 import { useTheme } from '../theme-context';
 
 /**
@@ -127,7 +127,7 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     height: 22,
     borderRadius: 11,
     paddingHorizontal: 5,
-    backgroundColor: colors.danger,
+    backgroundColor: UNREAD_BADGE,
     alignItems: 'center',
     justifyContent: 'center',
   },

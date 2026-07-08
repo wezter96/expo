@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../src/components/Avatar';
 import { useStore } from '../../src/store';
 import { Contact } from '../../src/types';
-import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET, UNREAD_BADGE } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
 import { relativeTime } from '../../src/time';
 
@@ -216,7 +216,7 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     height: 28,
     borderRadius: 14,
     paddingHorizontal: 6,
-    backgroundColor: colors.accent,
+    backgroundColor: UNREAD_BADGE,
     alignItems: 'center',
     justifyContent: 'center',
   },

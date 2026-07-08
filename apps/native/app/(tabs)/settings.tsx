@@ -104,8 +104,12 @@ export default function Settings() {
         {rows.map((row, i) => (
           <Pressable
             key={row.label}
-            accessibilityRole={row.onPress ? 'button' : 'text'}
-            accessibilityLabel={row.value ? `${row.label}. ${row.value}` : row.label}
+            // Actionable rows are buttons with a combined name; informational
+            // rows (no onPress) let their child text be read directly (an
+            // aria-label on a non-widget element is prohibited).
+            accessibilityRole={row.onPress ? 'button' : undefined}
+            accessibilityLabel={row.onPress ? (row.value ? `${row.label}. ${row.value}` : row.label) : undefined}
+            accessible={row.onPress ? undefined : false}
             onPress={row.onPress}
             disabled={!row.onPress}
             style={({ pressed }) => [styles.row, i > 0 && styles.rowDivider, pressed && row.onPress && styles.pressed]}

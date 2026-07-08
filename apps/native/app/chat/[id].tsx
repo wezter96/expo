@@ -310,6 +310,7 @@ export default function Chat() {
           headerRight: () => (
             <View style={styles.headerActions}>
               <Pressable
+                accessibilityRole="button"
                 accessibilityLabel={`Voice call ${contact.name}`}
                 onPress={() => beginCall('voice')}
                 hitSlop={12}
@@ -317,13 +318,14 @@ export default function Chat() {
                 <Ionicons name="call" size={26} color={colors.textOnDark} />
               </Pressable>
               <Pressable
+                accessibilityRole="button"
                 accessibilityLabel={`Video call ${contact.name}`}
                 onPress={() => beginCall('video')}
                 hitSlop={12}
               >
                 <Ionicons name="videocam" size={28} color={colors.textOnDark} />
               </Pressable>
-              <Pressable accessibilityLabel="More options" onPress={moreMenu} hitSlop={12}>
+              <Pressable accessibilityRole="button" accessibilityLabel="More options" onPress={moreMenu} hitSlop={12}>
                 <Ionicons name="ellipsis-vertical" size={26} color={colors.textOnDark} />
               </Pressable>
             </View>
@@ -379,6 +381,7 @@ export default function Chat() {
             {EMOJIS.map((e) => (
               <Pressable
                 key={e}
+                accessibilityRole="button"
                 accessibilityLabel={`React ${e}`}
                 onPress={() => reactingTo && toggleReaction(reactingTo, e)}
                 style={({ pressed }) => [styles.pickerEmojiWrap, pressed && styles.pressed]}
@@ -394,6 +397,7 @@ export default function Chat() {
         <Pressable style={styles.photoViewer} onPress={() => setViewingPhoto(null)}>
           {viewingPhoto ? <Image source={{ uri: viewingPhoto }} style={styles.photoFull} resizeMode="contain" /> : null}
           <Pressable
+            accessibilityRole="button"
             accessibilityLabel="Close photo"
             onPress={() => setViewingPhoto(null)}
             style={[styles.photoClose, { top: insets.top + spacing.sm }]}
@@ -419,6 +423,7 @@ export default function Chat() {
         {recording ? (
           <>
             <Pressable
+              accessibilityRole="button"
               accessibilityLabel="Cancel recording"
               onPress={() => stopRecording(false)}
               style={({ pressed }) => [styles.attachBtn, pressed && styles.pressed]}
@@ -430,6 +435,7 @@ export default function Chat() {
               <Text style={styles.recText}>Recording… {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}</Text>
             </View>
             <Pressable
+              accessibilityRole="button"
               accessibilityLabel="Send voice message"
               onPress={() => stopRecording(true)}
               style={({ pressed }) => [styles.sendBtn, pressed && styles.pressed]}
@@ -546,9 +552,12 @@ function Bubble({
         </View>
       ) : null}
       <View style={styles.bubbleCol}>
+      {/* The bubble long-press (react / delete) is a touch shortcut only. It is
+          intentionally not exposed as its own control so it doesn't nest an
+          interactive element around the read-aloud / react buttons inside it —
+          screen readers read the message text and use those explicit buttons. */}
       <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={canReact ? 'Hold to react' : `Read message aloud: ${message.text}`}
+        accessible={false}
         onLongPress={onLongPress}
         delayLongPress={300}
         style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}
@@ -596,6 +605,7 @@ function Bubble({
           {!mine && (
             <>
               <Pressable
+                accessibilityRole="button"
                 accessibilityLabel="Read this message aloud"
                 onPress={onSpeak}
                 hitSlop={10}
@@ -603,7 +613,7 @@ function Bubble({
                 <Ionicons name="volume-high" size={22} color={colors.primary} />
               </Pressable>
               {onReact ? (
-                <Pressable accessibilityLabel="React to this message" onPress={onReact} hitSlop={10}>
+                <Pressable accessibilityRole="button" accessibilityLabel="React to this message" onPress={onReact} hitSlop={10}>
                   <Ionicons name="happy-outline" size={22} color={colors.primary} />
                 </Pressable>
               ) : null}
@@ -629,6 +639,7 @@ function Bubble({
           {reactions.map((g) => (
             <Pressable
               key={g.emoji}
+              accessibilityRole="button"
               accessibilityLabel={`${g.emoji} ${g.count}`}
               onPress={() => onTapReaction(g.emoji)}
               style={[styles.chip, g.mine && styles.chipMine]}

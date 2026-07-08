@@ -121,7 +121,7 @@ export default function GroupSettings() {
           <View key={m.id} style={styles.member}>
             <Avatar name={m.name} uri={m.avatar} size={48} />
             <Text style={styles.memberName}>{m.name}</Text>
-            <Pressable accessibilityLabel={`Remove ${m.name}`} onPress={() => removeMember(m.id, m.name)} hitSlop={10}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${m.name}`} onPress={() => removeMember(m.id, m.name)} hitSlop={10}>
               <Ionicons name="close-circle" size={28} color={colors.danger} />
             </Pressable>
           </View>

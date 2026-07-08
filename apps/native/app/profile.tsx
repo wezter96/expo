@@ -68,7 +68,7 @@ export default function Profile() {
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
-        <Pressable accessibilityLabel="Change photo" onPress={pickPhoto} style={styles.photoWrap}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Change photo" onPress={pickPhoto} style={styles.photoWrap}>
           <Avatar name={name || 'You'} size={120} uri={photo ?? myAvatarUrl()} />
           <View style={styles.cameraBadge}>
             <Ionicons name="camera" size={22} color={colors.textOnDark} />

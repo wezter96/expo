@@ -101,6 +101,14 @@ export const radius = { sm: 8, md: 12, lg: 16, pill: 9999 };
 /** Minimum height for anything the user must tap (spec floor is 56). */
 export const TAP_TARGET = 64;
 
+/**
+ * Unread-count badge background. A deeper emerald than `accent` so the small
+ * white count digits clear WCAG AA (4.5:1) — the standard accent green only
+ * reaches ~3.8:1, which is fine for large button labels but not badge text.
+ * Self-contained (white on this green) so it holds in both light and dark.
+ */
+export const UNREAD_BADGE = '#047857'; // white text ≈ 5.5:1
+
 export const avatarColors = [
   '#1A4B84',
   '#059669',
