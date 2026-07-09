@@ -74,6 +74,13 @@ export default function Settings() {
         : undefined,
     },
     {
+      icon: 'shield-checkmark',
+      label: 'Encryption',
+      value: 'Recovery phrase & keys',
+      color: colors.accent,
+      onPress: () => router.push('/encryption'),
+    },
+    {
       icon: 'alert-circle',
       label: 'Emergency contact',
       value: emergencyName ?? 'Not set — tap to choose',

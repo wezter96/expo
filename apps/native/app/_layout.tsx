@@ -65,6 +65,7 @@ function Gate() {
         <Stack.Screen name="emergency" options={{ title: 'Emergency contact', presentation: 'modal' }} />
         <Stack.Screen name="group/[id]" options={{ title: 'Group', presentation: 'modal' }} />
         <Stack.Screen name="display" options={{ title: 'Display', presentation: 'modal' }} />
+        <Stack.Screen name="encryption" options={{ title: 'Encryption', presentation: 'modal' }} />
       </Stack>
       <IncomingCallOverlay />
     </>

@@ -1,4 +1,4 @@
-export type Member = { id: string; name: string; avatar?: string; lastSeen?: string };
+export type Member = { id: string; name: string; avatar?: string; lastSeen?: string; identityKey?: string };
 
 export type Contact = {
   id: string;
@@ -36,6 +36,8 @@ export type Message = {
   status?: 'sending' | 'sent' | 'failed';
   /** id of the sender (used to label who spoke in group chats). */
   authorId?: string;
+  /** true if this message was end-to-end encrypted on the server. */
+  encrypted?: boolean;
   /** epoch millis */
   at: number;
 };

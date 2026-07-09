@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { heartbeat, loadStoredAuth, pb, serverEnabled } from '../api/pocketbase';
+import { heartbeat, loadStoredAuth, pb, publishE2EEKeys, serverEnabled } from '../api/pocketbase';
 import { registerForPush } from '../push';
 
 export type KinlyUser = { id: string; name: string; email: string; phone: string };
@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const u = readUser();
         setUser(u);
         setReady(true);
-        if (u) void registerForPush();
+        if (u) { void registerForPush(); void publishE2EEKeys(); }
       }
     })();
     return () => {
@@ -70,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await pb.collection('users').authWithPassword(email.trim(), password);
     setUser(readUser());
     void registerForPush();
+    void publishE2EEKeys();
   }, []);
 
   const signUp = useCallback(
@@ -87,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       pb.collection('users').requestVerification(email.trim()).catch(() => {});
       setUser(readUser());
       void registerForPush();
+      void publishE2EEKeys();
     },
     []
   );

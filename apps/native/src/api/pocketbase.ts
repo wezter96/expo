@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import PocketBase, { type RecordModel } from 'pocketbase';
 import './eventsource'; // installs the realtime EventSource polyfill on native
 import type { AgentResult } from '../ai/agent';
+import * as e2ee from '../e2ee';
 import type { Contact, Message, MessageKind } from '../types';
 
 /**
@@ -88,7 +89,7 @@ export async function savePushToken(token: string): Promise<void> {
 
 // --- mappers --------------------------------------------------------------
 
-type MemberDTO = { id: string; name: string; avatar: string; lastSeen?: string };
+type MemberDTO = { id: string; name: string; avatar: string; lastSeen?: string; identityKey?: string };
 type ConversationDTO = {
   id: string;
   name: string;
@@ -112,6 +113,7 @@ function toContact(c: ConversationDTO): Contact {
     name: m.name,
     avatar: fileUrl('users', m.id, m.avatar),
     lastSeen: m.lastSeen,
+    identityKey: m.identityKey,
   }));
   return {
     id: c.id,
@@ -138,6 +140,7 @@ function toMessage(r: RecordModel, meId: string | null): Message {
     duration: typeof r.duration === 'number' ? (r.duration as number) : undefined,
     mine: !!meId && r.author === meId,
     authorId: r.author as string,
+    encrypted: !!r.enc,
     at: r.created ? Date.parse(r.created as string) : Date.now(),
   };
 }
@@ -205,6 +208,91 @@ export async function updateGroupMembers(conversationId: string, memberIds: stri
   await pb.collection('conversations').update(conversationId, { members: Array.from(new Set(memberIds)) });
 }
 
+// --- end-to-end encryption -------------------------------------------------
+
+/** Publish this device's E2EE public keys (call after sign-in). Idempotent. */
+export async function publishE2EEKeys(): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  try {
+    const bundle = await e2ee.e2eePublicBundle();
+    if (!bundle) return; // web / unsupported
+    const rec = pb.authStore.record;
+    if (rec.identityKey === bundle.identity && rec.prekeyKey === bundle.prekey) return;
+    await pb.collection('users').update(rec.id, { identityKey: bundle.identity, prekeyKey: bundle.prekey });
+    await pb.collection('users').authRefresh();
+  } catch {
+    // non-fatal; messages fall back to plaintext until keys publish
+  }
+}
+
+// In-memory cache of unwrapped conversation keys (this session only).
+const convKeyCache = new Map<string, Uint8Array>();
+
+/** Fetch + unwrap my conversation key, if one has been published for me. */
+async function getConvKey(conversationId: string): Promise<Uint8Array | null> {
+  if (!pb || !pb.authStore.record || !e2ee.e2eeSupported) return null;
+  const cached = convKeyCache.get(conversationId);
+  if (cached) return cached;
+  try {
+    const row = await pb
+      .collection('conversation_keys')
+      .getFirstListItem(pb.filter('conversation = {:c} && member = {:m}', { c: conversationId, m: pb.authStore.record.id }), {
+        sort: '-epoch',
+        expand: 'wrappedBy',
+      });
+    const wrappedBy = (row.expand as { wrappedBy?: RecordModel } | undefined)?.wrappedBy;
+    const identity = wrappedBy?.identityKey as string | undefined;
+    if (row.wrappedKey && identity) {
+      const key = await e2ee.unwrapConvKey(row.wrappedKey as string, identity);
+      convKeyCache.set(conversationId, key);
+      return key;
+    }
+  } catch {
+    // no key wrapped for me yet
+  }
+  return null;
+}
+
+/**
+ * Get the conversation key, creating + distributing one if none exists and all
+ * members have published identity keys. Returns null when E2EE can't be used
+ * (unsupported, or a member has no key yet) — callers fall back to plaintext.
+ */
+async function ensureConvKey(conversationId: string): Promise<Uint8Array | null> {
+  const existing = await getConvKey(conversationId);
+  if (existing) return existing;
+  if (!pb || !pb.authStore.record || !e2ee.e2eeSupported) return null;
+  try {
+    const conv = await pb.collection('conversations').getOne(conversationId, { expand: 'members' });
+    const members = ((conv.expand as { members?: RecordModel[] } | undefined)?.members ?? []) as RecordModel[];
+    if (!members.length || members.some((m) => !m.identityKey)) return null; // someone can't do E2EE yet
+    const key = e2ee.newConvKey();
+    for (const m of members) {
+      const wrapped = await e2ee.wrapConvKeyFor(m.identityKey as string, key);
+      await pb
+        .collection('conversation_keys')
+        .create({ conversation: conversationId, member: m.id, wrappedBy: pb.authStore.record.id, epoch: 0, wrappedKey: wrapped });
+    }
+    convKeyCache.set(conversationId, key);
+    return key;
+  } catch {
+    // a concurrent creator may have won the unique index — try reading theirs
+    return getConvKey(conversationId);
+  }
+}
+
+/** Decrypt an encrypted message record's text (best-effort; never throws). */
+async function decryptText(r: RecordModel): Promise<string> {
+  if (!r.enc) return (r.text as string) ?? '';
+  try {
+    const key = await getConvKey(r.conversation as string);
+    if (!key) return '🔒 Encrypted — unlock on your other device';
+    return e2ee.openPayload(key, r.cipher as string).t;
+  } catch {
+    return '🔒 Could not decrypt this message';
+  }
+}
+
 // --- messages -------------------------------------------------------------
 
 export async function fetchMessages(contactId: string): Promise<Message[] | null> {
@@ -215,7 +303,13 @@ export async function fetchMessages(contactId: string): Promise<Message[] | null
       filter: pb.filter('conversation = {:id}', { id: contactId }),
       sort: 'created',
     });
-    return rows.map((r) => toMessage(r, meId));
+    const out: Message[] = [];
+    for (const r of rows) {
+      const m = toMessage(r, meId);
+      if (r.enc) m.text = await decryptText(r);
+      out.push(m);
+    }
+    return out;
   } catch {
     return null;
   }
@@ -230,17 +324,18 @@ export function newId(): string {
   return s;
 }
 
-/** Send a text message with a client-provided id. Returns true on success. */
+/** Send a text message with a client-provided id. Returns true on success.
+ *  Sealed end-to-end when the conversation has E2EE keys; plaintext otherwise. */
 export async function pushMessage(id: string, contactId: string, text: string): Promise<boolean> {
   if (!pb || !pb.authStore.record) return false;
   try {
-    await pb.collection('messages').create({
-      id,
-      conversation: contactId,
-      author: pb.authStore.record.id,
-      kind: 'text',
-      text: text.trim(),
-    });
+    const base = { id, conversation: contactId, author: pb.authStore.record.id, kind: 'text' };
+    const key = await ensureConvKey(contactId);
+    if (key) {
+      await pb.collection('messages').create({ ...base, enc: true, text: '', cipher: e2ee.sealPayload(key, { t: text.trim() }) });
+    } else {
+      await pb.collection('messages').create({ ...base, text: text.trim() });
+    }
     return true;
   } catch {
     return false;
@@ -374,8 +469,16 @@ export async function subscribeMessages(
   const meId = currentUserId();
   try {
     await pb.collection('messages').subscribe('*', (e) => {
-      if (e.action === 'create' || e.action === 'update') onChange(toMessage(e.record, meId));
-      else if (e.action === 'delete') onDelete?.(e.record.id);
+      if (e.action === 'create' || e.action === 'update') {
+        const rec = e.record;
+        if (rec.enc) {
+          decryptText(rec).then((t) => onChange({ ...toMessage(rec, meId), text: t }));
+        } else {
+          onChange(toMessage(rec, meId));
+        }
+      } else if (e.action === 'delete') {
+        onDelete?.(e.record.id);
+      }
     });
     return () => {
       pb.collection('messages').unsubscribe('*').catch(() => {});

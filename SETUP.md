@@ -48,9 +48,11 @@ error, fix it here before continuing** (see gotchas).
 
 1. Open `http://localhost:8090/_/` and create the **admin** account.
 2. Confirm the collections exist: `conversations` (with `disappearTimer`),
-   `messages`, `reactions`, `reads`, `calls`, `reports`, and `users` (with
-   `phone`, `pushToken`, `lastSeen`, `blocked`). The `reports` collection is
-   admin-only — safety reports filed from the app land here for you to review.
+   `messages` (with `enc` + `cipher` for encrypted messages), `reactions`,
+   `reads`, `calls`, `reports`, `conversation_keys`, and `users` (with `phone`,
+   `pushToken`, `lastSeen`, `blocked`, `identityKey`, `prekeyKey`). The
+   `reports` collection is admin-only. `conversation_keys` holds each member's
+   *wrapped* (unreadable) conversation key — the server never sees the key.
 3. **Email** (needed for password reset / verification): Settings → Mail
    settings → configure SMTP (e.g. a Gmail app password or a transactional
    provider). Without this, "Forgot password" silently does nothing.
@@ -155,9 +157,22 @@ admin-only `reports` collection). Long-press your own message to **unsend** it
   (~20/hour) to deter enumerating who is on Kinly. It's an in-memory soft cap
   per hooks VM — add real rate limiting at your proxy/CDN for production.
 
-> **Not yet end-to-end encrypted.** Messages/media are still stored so the
-> server *could* read them. See [`E2EE.md`](E2EE.md) for the plan to close this
-> — it's the main remaining gap versus Signal.
+**End-to-end encryption (Phase 1, text).** On sign-in each device publishes its
+public keys (`identityKey`/`prekeyKey`); the private keys stay in the device
+secure enclave. A per-conversation key is wrapped per-member into
+`conversation_keys`, and **text messages are sealed** (`enc=true`, content in
+`cipher`) so the server stores only ciphertext. A 🔒 banner shows in encrypted
+chats; Settings → Encryption shows the 24-word recovery phrase and restore.
+The verified Double Ratchet / sender-keys (forward secrecy) and **media file
+encryption** are built + tested but **not yet wired into live messages** — see
+[`E2EE.md`](E2EE.md). Needs a dev build (secure storage) and a
+**professional crypto audit** before you rely on it. Verify the crypto core:
+
+```bash
+cd apps/native
+npx esbuild src/crypto/crypto.test.ts --bundle --platform=node --format=esm \
+  --external:expo-crypto --outfile=/tmp/t.mjs && node /tmp/t.mjs   # 27 passed
+```
 
 **Known deferrals** (documented, not bugs): typing indicators (PocketBase has no
 ephemeral channel), fully-backgrounded CallKit-style ringing, and contacts-only

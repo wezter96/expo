@@ -13,9 +13,11 @@ function userBrief(id) {
       phone: u.getString('phone') || '',
       avatar: u.getString('avatar') || '',
       lastSeen: u.getString('lastSeen') || '',
+      identityKey: u.getString('identityKey') || '',
+      prekeyKey: u.getString('prekeyKey') || '',
     };
   } catch (_) {
-    return { id: id, name: 'Someone', phone: '', avatar: '', lastSeen: '' };
+    return { id: id, name: 'Someone', phone: '', avatar: '', lastSeen: '', identityKey: '', prekeyKey: '' };
   }
 }
 

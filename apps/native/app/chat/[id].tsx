@@ -83,6 +83,7 @@ export default function Chat() {
   const contact = id ? getContact(id) : undefined;
   const messages = id ? messagesFor(id) : [];
   const disappearSecs = id ? disappearTimerFor(id) : 0;
+  const encrypted = messages.some((m) => m.encrypted);
 
   // Reactions + read receipts (server-backed), refreshed on any change.
   useEffect(() => {
@@ -367,6 +368,12 @@ export default function Chat() {
         }}
       />
 
+      {encrypted ? (
+        <View style={styles.encNote}>
+          <Ionicons name="lock-closed" size={16} color={colors.accent} />
+          <Text style={styles.encNoteText}>End-to-end encrypted — only you and {contact.name} can read these</Text>
+        </View>
+      ) : null}
       {disappearSecs > 0 ? (
         <View style={styles.disappearNote}>
           <Ionicons name="timer-outline" size={18} color={colors.primary} />
@@ -718,6 +725,15 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     backgroundColor: colors.bubbleTheirs,
   },
   disappearNoteText: { fontSize: fonts.small, color: colors.primary, fontWeight: '700' },
+  encNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  encNoteText: { flexShrink: 1, fontSize: fonts.small - 2, color: colors.textMuted, fontWeight: '600', textAlign: 'center' },
 
   bubbleCol: { maxWidth: '82%' },
   reactions: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: -6 },

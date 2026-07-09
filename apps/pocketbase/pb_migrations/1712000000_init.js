@@ -22,6 +22,10 @@ migrate(
     users.fields.add(
       new Field({ type: 'relation', name: 'blocked', collectionId: users.id, cascadeDelete: false, maxSelect: 200 }),
     );
+    // End-to-end encryption public keys (base64). Private keys never leave the
+    // device. identityKey = long-term X25519; prekeyKey = initial ratchet key.
+    users.fields.add(new Field({ type: 'text', name: 'identityKey', max: 100 }));
+    users.fields.add(new Field({ type: 'text', name: 'prekeyKey', max: 100 }));
     users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
     // Any signed-in user can view a user record (needed to show names & photos
     // of the people you chat with). You can only change your own record.
@@ -101,6 +105,11 @@ migrate(
         { type: 'text', name: 'kind', max: 20 },
         // caption / body text (not required — photo & voice messages may have none)
         { type: 'text', name: 'text', max: 2000 },
+        // End-to-end encryption: when enc = true, `text` is empty and the real
+        // content (and any media key) is inside `cipher` (base64 AEAD). Media
+        // files in image/audio are then ciphertext blobs.
+        { type: 'bool', name: 'enc' },
+        { type: 'text', name: 'cipher', max: 30000 },
         { type: 'file', name: 'image', maxSelect: 1, maxSize: 10485760, mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] },
         { type: 'file', name: 'audio', maxSelect: 1, maxSize: 10485760, mimeTypes: ['audio/mp4', 'audio/m4a', 'audio/mpeg', 'audio/aac', 'audio/webm'] },
         // voice message length in seconds
@@ -191,9 +200,35 @@ migrate(
       indexes: ['CREATE INDEX idx_reports_reported ON reports (reportedUser, created)'],
     });
     app.save(reports);
+
+    // --- conversation_keys (E2EE: each member's wrapped conversation key) ---
+    // The conversation's symmetric key, encrypted ("wrapped") separately for
+    // each member with that member's identity key. The server stores only the
+    // wrapped (unreadable) blob; only the member's device can unwrap it.
+    const conversationKeys = new Collection({
+      type: 'base',
+      name: 'conversation_keys',
+      // You may only read the rows wrapped for *you*.
+      listRule: '@request.auth.id != "" && member.id ?= @request.auth.id',
+      viewRule: '@request.auth.id != "" && member.id ?= @request.auth.id',
+      // Any member of the conversation may publish wrapped keys for members.
+      createRule: '@request.auth.id != "" && conversation.members.id ?= @request.auth.id',
+      updateRule: null,
+      deleteRule: '@request.auth.id != "" && conversation.members.id ?= @request.auth.id',
+      fields: [
+        { type: 'relation', name: 'conversation', required: true, cascadeDelete: true, maxSelect: 1, collectionId: conversations.id },
+        { type: 'relation', name: 'member', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        { type: 'relation', name: 'wrappedBy', cascadeDelete: false, maxSelect: 1, collectionId: users.id },
+        { type: 'number', name: 'epoch', min: 0 },
+        { type: 'text', name: 'wrappedKey', required: true, max: 400 },
+        { type: 'autodate', name: 'created', onCreate: true },
+      ],
+      indexes: ['CREATE UNIQUE INDEX idx_convkeys_member_epoch ON conversation_keys (conversation, member, epoch)'],
+    });
+    app.save(conversationKeys);
   },
   (app) => {
-    for (const name of ['reports', 'calls', 'reactions', 'reads', 'messages', 'conversations']) {
+    for (const name of ['conversation_keys', 'reports', 'calls', 'reactions', 'reads', 'messages', 'conversations']) {
       try {
         app.delete(app.findCollectionByNameOrId(name));
       } catch (_) {
@@ -202,7 +237,7 @@ migrate(
     }
     try {
       const users = app.findCollectionByNameOrId('users');
-      for (const f of ['phone', 'pushToken', 'lastSeen', 'blocked']) {
+      for (const f of ['phone', 'pushToken', 'lastSeen', 'blocked', 'identityKey', 'prekeyKey']) {
         if (users.fields.getByName(f)) users.fields.removeByName(f);
       }
       app.save(users);

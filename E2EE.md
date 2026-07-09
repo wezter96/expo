@@ -1,10 +1,40 @@
 # Kinly — End-to-End Encryption design
 
-Status: **proposal / not yet implemented.** This documents the plan, the
-trade-offs, and the decisions to make *before* writing crypto code. Kinly's
-positioning is "Signal-level privacy with a UX an 80-year-old loves," so the
-guiding rule is: **maximize privacy without adding a single concept the user
-has to understand.**
+Kinly's positioning is "Signal-level privacy with a UX an 80-year-old loves,"
+so the guiding rule is: **maximize privacy without adding a single concept the
+user has to understand.**
+
+## Implementation status
+
+- ✅ **Crypto core** (`src/crypto/`, pure JS on audited @noble libs) — X25519,
+  HKDF, XChaCha20-Poly1305, conversation-key wrapping, **Double Ratchet**
+  (1:1), **sender keys** (groups), payload + media helpers. **Unit-tested in
+  Node** (`crypto.test.ts`, 27 round-trip assertions incl. out-of-order ratchet
+  and tamper rejection).
+- ✅ **Key manager** (`identity.ts`) — identity + prekey in the device secure
+  enclave (`expo-secure-store`), 24-word recovery phrase, restore/reset. In-app
+  screen at `app/encryption.tsx`.
+- ✅ **Phase 1 live for text** — `users.identityKey/prekeyKey` published on
+  sign-in; per-conversation key wrapped per-member in `conversation_keys`;
+  **text messages are sealed on send and opened on receive** with graceful
+  plaintext fallback when a member has no key yet. A 🔒 banner shows in
+  encrypted chats.
+- ⏳ **Media encryption** — helpers exist + are tested, but photo/voice **files
+  are not yet encrypted** in the live path (only text is). This is the next
+  wiring step; until then, media in an otherwise-encrypted chat is not E2E
+  protected.
+- ⏳ **Forward secrecy (ratchet/sender-keys) live** — the primitives are built
+  and tested but not yet driving live messages; needs the session-handshake
+  design below to be finalized and tested.
+- ⏳ **Key backup to OS cloud keychain** and **multi-device pairing** — designed
+  below, not built (recovery-phrase backup works today).
+
+> ⚠️ **The crypto has NOT had a professional audit.** Home-grown protocol wiring
+> (X3DH-lite, ratchet integration) especially must be reviewed by a
+> cryptographer before anyone relies on Kinly for sensitive communication.
+
+This document is the plan and the trade-offs; the sections below still describe
+the intended end state.
 
 ---
 
