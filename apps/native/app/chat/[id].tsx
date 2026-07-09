@@ -63,6 +63,8 @@ export default function Chat() {
     blockContact,
     unblockContact,
     reportContact,
+    disappearTimerFor,
+    setDisappearing,
   } = useStore();
   const [draft, setDraft] = useState('');
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
@@ -80,6 +82,7 @@ export default function Chat() {
 
   const contact = id ? getContact(id) : undefined;
   const messages = id ? messagesFor(id) : [];
+  const disappearSecs = id ? disappearTimerFor(id) : 0;
 
   // Reactions + read receipts (server-backed), refreshed on any change.
   useEffect(() => {
@@ -269,10 +272,41 @@ export default function Chat() {
     );
   }
 
+  const DISAPPEAR_OPTIONS: { label: string; seconds: number }[] = [
+    { label: 'Off', seconds: 0 },
+    { label: 'After 1 hour', seconds: 3600 },
+    { label: 'After 1 day', seconds: 86400 },
+    { label: 'After 1 week', seconds: 604800 },
+  ];
+
+  function disappearingLabel(seconds: number): string {
+    return DISAPPEAR_OPTIONS.find((o) => o.seconds === seconds)?.label ?? 'Off';
+  }
+
+  function disappearingMenu() {
+    const current = disappearTimerFor(contact!.id);
+    Alert.alert(
+      'Disappearing messages',
+      'New messages will be deleted for everyone after the time you choose.',
+      [
+        ...DISAPPEAR_OPTIONS.map((o) => ({
+          text: o.seconds === current ? `${o.label} ✓` : o.label,
+          onPress: () => void setDisappearing(contact!.id, o.seconds),
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]
+    );
+  }
+
   function moreMenu() {
     const fav = isFavorite(contact!.id);
+    const timer = disappearTimerFor(contact!.id);
     const opts: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [
       { text: fav ? 'Remove from favorites' : 'Add to favorites', onPress: () => toggleFavorite(contact!.id) },
+      {
+        text: `Disappearing messages: ${disappearingLabel(timer)}`,
+        onPress: disappearingMenu,
+      },
     ];
     if (contact!.isGroup) {
       opts.push({ text: 'Group info & members', onPress: () => router.push(`/group/${contact!.id}`) });
@@ -332,6 +366,13 @@ export default function Chat() {
           ),
         }}
       />
+
+      {disappearSecs > 0 ? (
+        <View style={styles.disappearNote}>
+          <Ionicons name="timer-outline" size={18} color={colors.primary} />
+          <Text style={styles.disappearNoteText}>Messages disappear {disappearingLabel(disappearSecs).toLowerCase()}</Text>
+        </View>
+      ) : null}
 
       <FlatList
         ref={listRef}
@@ -667,6 +708,16 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   headerName: { color: colors.textOnDark, fontSize: 22, fontWeight: '800' },
   headerPresence: { color: '#D6E5F5', fontSize: 13, fontWeight: '600' },
   seen: { alignSelf: 'flex-end', fontSize: fonts.small - 2, color: colors.textMuted, fontWeight: '700', marginTop: 2 },
+  disappearNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.bubbleTheirs,
+  },
+  disappearNoteText: { fontSize: fonts.small, color: colors.primary, fontWeight: '700' },
 
   bubbleCol: { maxWidth: '82%' },
   reactions: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: -6 },

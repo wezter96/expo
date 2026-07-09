@@ -42,11 +42,25 @@ function mapConversation(conv, meId) {
     memberNames: others.map((o) => o.name),
     // { id, name, avatar-filename } for each of the OTHER members
     members: others,
+    // Disappearing-messages timer (seconds; 0 = off).
+    disappearTimer: conv.getInt('disappearTimer') || 0,
   };
 }
 
 function callerConversations(meId) {
   return $app.findRecordsByFilter('conversations', 'members.id ?= {:uid}', '-updated', 200, 0, { uid: meId });
+}
+
+// Soft per-user rate limit for phone lookups, to deter enumerating who is on
+// Kinly. In-memory within each hooks VM (not shared across pooled VMs), so it's
+// a deterrent, not a guarantee — put real rate limiting at your proxy/CDN too.
+const lookupHits = {};
+function rateLimited(uid, max, windowMs) {
+  const now = Date.now();
+  const arr = (lookupHits[uid] || []).filter((t) => now - t < windowMs);
+  arr.push(now);
+  lookupHits[uid] = arr;
+  return arr.length > max;
 }
 
 /** True if either user has blocked the other. */
@@ -69,6 +83,9 @@ function blockedPair(aId, bId) {
 /** Find a user by phone number. POST /api/kinly/find-user { phone } */
 routerAdd('POST', '/api/kinly/find-user', (e) => {
   if (!e.auth) return e.json(401, { error: 'Please sign in.' });
+  if (rateLimited(e.auth.id, 20, 60 * 60 * 1000)) {
+    return e.json(429, { error: 'Too many lookups. Please wait a little while and try again.' });
+  }
   const info = e.requestInfo();
   const phone = String((info.body && info.body.phone) || '').trim();
   if (!phone) return e.json(400, { error: 'A phone number is required.' });
@@ -84,6 +101,9 @@ routerAdd('POST', '/api/kinly/find-user', (e) => {
 routerAdd('POST', '/api/kinly/direct', (e) => {
   const auth = e.auth;
   if (!auth) return e.json(401, { error: 'Please sign in.' });
+  if (rateLimited(auth.id, 20, 60 * 60 * 1000)) {
+    return e.json(429, { error: 'Too many lookups. Please wait a little while and try again.' });
+  }
   const info = e.requestInfo();
   const phone = String((info.body && info.body.phone) || '').trim();
   if (!phone) return e.json(400, { error: 'A phone number is required.' });
@@ -352,13 +372,16 @@ onRecordAfterCreateSuccess((e) => {
       authorName = $app.findRecordById('users', authorId).getString('name') || authorName;
     } catch (_) {}
 
+    // Privacy: never put message *content* in the push payload — it transits
+    // Apple/Google push servers. Reveal only who and the message kind; the app
+    // fetches and shows the real content after the device unlocks it.
     const kind = msg.getString('kind');
-    let preview = msg.getString('text');
-    if (kind === 'photo') preview = '📷 Photo' + (preview ? ': ' + preview : '');
-    else if (kind === 'voice') preview = '🎤 Voice message';
+    let summary = 'sent you a message';
+    if (kind === 'photo') summary = 'sent a photo';
+    else if (kind === 'voice') summary = 'sent a voice message';
 
-    const title = isGroup ? conv.getString('title') || 'New message' : authorName;
-    const body = (isGroup ? authorName + ': ' : '') + preview;
+    const title = isGroup ? conv.getString('title') || 'Kinly' : authorName;
+    const body = isGroup ? authorName + ' ' + summary : summary;
 
     const memberIds = conv.get('members') || [];
     const messages = [];
@@ -448,3 +471,36 @@ onRecordAfterCreateSuccess((e) => {
   }
   e.next();
 }, 'calls');
+
+// ===========================================================================
+// Disappearing messages — every 15 min, delete messages older than their
+// conversation's timer. Deletes stream to clients over realtime; clients also
+// hide expired messages immediately so they don't linger until the sweep.
+// ===========================================================================
+
+cronAdd('disappearing_sweep', '*/15 * * * *', () => {
+  try {
+    const convs = $app.findRecordsByFilter('conversations', 'disappearTimer > 0', '', 1000, 0);
+    const now = Date.now();
+    for (const c of convs) {
+      const secs = c.getInt('disappearTimer');
+      if (!secs) continue;
+      const cutoff = new Date(now - secs * 1000).toISOString().replace('T', ' ');
+      const old = $app.findRecordsByFilter(
+        'messages',
+        'conversation = {:c} && created < {:t}',
+        'created',
+        500,
+        0,
+        { c: c.id, t: cutoff },
+      );
+      for (const m of old) {
+        try {
+          $app.delete(m);
+        } catch (_) {}
+      }
+    }
+  } catch (err) {
+    $app.logger().error('disappearing sweep failed', 'error', String(err));
+  }
+});

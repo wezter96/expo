@@ -42,6 +42,10 @@ migrate(
       fields: [
         { type: 'text', name: 'title', max: 120 },
         { type: 'bool', name: 'isGroup' },
+        // Disappearing messages: seconds after which a message is auto-deleted
+        // (0 / empty = off). Swept by a cron hook; clients also hide expired
+        // messages immediately.
+        { type: 'number', name: 'disappearTimer', min: 0 },
         {
           type: 'relation',
           name: 'members',

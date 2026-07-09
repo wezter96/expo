@@ -12,6 +12,7 @@ import {
   pushVoice,
   reportUser,
   serverEnabled,
+  setDisappearTimer,
   subscribeMessages,
   unblockUser,
 } from './api/pocketbase';
@@ -64,6 +65,9 @@ type Store = {
   blockContact: (userId: string) => Promise<void>;
   unblockContact: (userId: string) => Promise<void>;
   reportContact: (input: { reportedUserId: string; conversationId?: string; reason?: string }) => Promise<boolean>;
+  /** Disappearing messages: current timer (seconds) and setter for a conversation. */
+  disappearTimerFor: (contactId: string) => number;
+  setDisappearing: (contactId: string, seconds: number) => Promise<void>;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -237,9 +241,36 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const messagesFor = useCallback(
-    (contactId: string) =>
-      state.messages.filter((m) => m.contactId === contactId).sort((a, b) => a.at - b.at),
-    [state.messages]
+    (contactId: string) => {
+      const timer = state.contacts.find((c) => c.id === contactId)?.disappearTimer ?? 0;
+      // Hide messages past the disappearing timer immediately (the server cron
+      // deletes them for good shortly after).
+      const cutoff = timer > 0 ? Date.now() - timer * 1000 : 0;
+      return state.messages
+        .filter((m) => m.contactId === contactId && (!cutoff || m.at >= cutoff))
+        .sort((a, b) => a.at - b.at);
+    },
+    [state.messages, state.contacts]
+  );
+
+  const disappearTimerFor = useCallback(
+    (contactId: string) => state.contacts.find((c) => c.id === contactId)?.disappearTimer ?? 0,
+    [state.contacts]
+  );
+
+  const setDisappearing = useCallback(
+    async (contactId: string, seconds: number) => {
+      // Optimistically reflect the new timer, then persist + refresh.
+      setState((s) => ({
+        ...s,
+        contacts: s.contacts.map((c) => (c.id === contactId ? { ...c, disappearTimer: seconds } : c)),
+      }));
+      if (online && uid) {
+        await setDisappearTimer(contactId, seconds);
+        await hydrateFromServer();
+      }
+    },
+    [online, uid, hydrateFromServer]
   );
 
   // Add a message to the local store (accepts an explicit id so an optimistic
@@ -427,6 +458,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     blockContact,
     unblockContact,
     reportContact,
+    disappearTimerFor,
+    setDisappearing,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

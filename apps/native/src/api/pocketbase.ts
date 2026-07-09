@@ -97,6 +97,7 @@ type ConversationDTO = {
   isGroup: boolean;
   memberNames: string[];
   members: MemberDTO[];
+  disappearTimer?: number;
 };
 
 /** Build a public file URL for a PocketBase record file field. */
@@ -121,6 +122,7 @@ function toContact(c: ConversationDTO): Contact {
     memberNames: c.memberNames,
     avatar: c.isGroup ? undefined : members[0]?.avatar,
     members,
+    disappearTimer: c.disappearTimer ?? 0,
   };
 }
 
@@ -285,6 +287,12 @@ export async function pushVoice(id: string, contactId: string, uri: string, dura
   } catch {
     return false;
   }
+}
+
+/** Set a conversation's disappearing-messages timer (seconds; 0 = off). */
+export async function setDisappearTimer(conversationId: string, seconds: number): Promise<void> {
+  if (!pb) return;
+  await pb.collection('conversations').update(conversationId, { disappearTimer: Math.max(0, Math.round(seconds)) });
 }
 
 /** Delete (unsend) a message. Only the author may; realtime removes it for everyone. */

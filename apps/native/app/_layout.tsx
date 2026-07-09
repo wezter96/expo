@@ -10,6 +10,7 @@ import React, { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppLockProvider, LockOverlay } from '../src/applock';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
 import { AuthScreen } from '../src/auth/AuthScreen';
 import { IncomingCallOverlay } from '../src/calls/IncomingCallOverlay';
@@ -95,12 +96,15 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <AuthProvider>
-            <StoreProvider>
-              <ThemedStatusBar />
-              <Gate />
-            </StoreProvider>
-          </AuthProvider>
+          <AppLockProvider>
+            <AuthProvider>
+              <StoreProvider>
+                <ThemedStatusBar />
+                <Gate />
+                <LockOverlay />
+              </StoreProvider>
+            </AuthProvider>
+          </AppLockProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

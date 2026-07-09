@@ -13,6 +13,8 @@ export type Contact = {
   avatar?: string;
   /** The other members (for resolving group sender names/photos). */
   members?: Member[];
+  /** Disappearing-messages timer in seconds (0 / undefined = off). */
+  disappearTimer?: number;
 };
 
 export type MessageKind = 'text' | 'photo' | 'voice';

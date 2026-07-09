@@ -6,6 +6,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../src/components/Avatar';
 import { myAvatarUrl, serverEnabled } from '../../src/api/pocketbase';
+import { useAppLock } from '../../src/applock';
 import { useAuth } from '../../src/auth/AuthContext';
 import { useStore } from '../../src/store';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
@@ -24,6 +25,7 @@ export default function Settings() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { emergencyId, getContact } = useStore();
+  const { available: lockAvailable, enabled: lockEnabled, setEnabled: setLockEnabled } = useAppLock();
   const { colors, fonts } = useTheme();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const online = serverEnabled();
@@ -55,6 +57,21 @@ export default function Settings() {
       label: 'Display',
       value: 'Text size & dark mode',
       onPress: () => router.push('/display'),
+    },
+    {
+      icon: lockEnabled ? 'lock-closed' : 'lock-open',
+      label: 'App lock',
+      value: !lockAvailable
+        ? 'Not available on this device'
+        : lockEnabled
+          ? 'On — Face ID / fingerprint / passcode'
+          : 'Off — tap to require unlock',
+      color: lockEnabled ? colors.accent : colors.primary,
+      onPress: lockAvailable
+        ? () => {
+            void setLockEnabled(!lockEnabled);
+          }
+        : undefined,
     },
     {
       icon: 'alert-circle',

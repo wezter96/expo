@@ -5,26 +5,27 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "kinly",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0B5FA5"
+      "backgroundColor": "#1A4B84"
     },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Kinly uses your camera so your family can see you on video calls.",
-        "NSMicrophoneUsageDescription": "Kinly uses your microphone so your family can hear you on calls."
+        "NSMicrophoneUsageDescription": "Kinly uses your microphone so your family can hear you on calls.",
+        "NSFaceIDUsageDescription": "Kinly uses Face ID to lock the app so only you can open your messages."
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0B5FA5"
+        "backgroundColor": "#1A4B84"
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
@@ -44,14 +45,14 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
-          "backgroundColor": "#0B5FA5",
+          "backgroundColor": "#1A4B84",
           "resizeMode": "contain"
         }
       ],
       [
         "expo-notifications",
         {
-          "color": "#0B5FA5"
+          "color": "#1A4B84"
         }
       ],
       "expo-image-picker"

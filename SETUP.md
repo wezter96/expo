@@ -47,10 +47,10 @@ error, fix it here before continuing** (see gotchas).
 ## 2. Configure PocketBase
 
 1. Open `http://localhost:8090/_/` and create the **admin** account.
-2. Confirm the collections exist: `conversations`, `messages`, `reactions`,
-   `reads`, `calls`, `reports`, and `users` (with `phone`, `pushToken`,
-   `lastSeen`, `blocked`). The `reports` collection is admin-only — safety
-   reports filed from the app land here for you to review.
+2. Confirm the collections exist: `conversations` (with `disappearTimer`),
+   `messages`, `reactions`, `reads`, `calls`, `reports`, and `users` (with
+   `phone`, `pushToken`, `lastSeen`, `blocked`). The `reports` collection is
+   admin-only — safety reports filed from the app land here for you to review.
 3. **Email** (needed for password reset / verification): Settings → Mail
    settings → configure SMTP (e.g. a Gmail app password or a transactional
    provider). Without this, "Forgot password" silently does nothing.
@@ -137,6 +137,27 @@ a person (either side blocked → messages and 1:1 start are refused server-side
 enforced in `pb_hooks` and the `direct` route) or **report** them (writes to the
 admin-only `reports` collection). Long-press your own message to **unsend** it
 (`messages.deleteRule` = author; the delete streams to everyone over realtime).
+
+**Privacy features.**
+- **Disappearing messages** — chat ⋮ menu → pick Off / 1 hour / 1 day / 1 week.
+  Stored as `conversations.disappearTimer` (seconds). A **cron hook**
+  (`disappearing_sweep`, every 15 min) deletes expired messages; clients also
+  hide them immediately. This needs PocketBase running continuously for the
+  cron to fire.
+- **App lock** — Settings → App lock requires Face ID / fingerprint / passcode
+  to open the app (via `expo-local-authentication`). Local-only; re-locks on
+  background. Needs a dev build and an enrolled biometric/passcode; shows
+  "Not available" on web or unenrolled devices.
+- **Content-free push** — notifications say only *who* messaged and the kind
+  ("Mary sent you a photo"), never the message text, so content never transits
+  Apple/Google push servers.
+- **Lookup rate-limiting** — `find-user` / `direct` cap phone lookups per user
+  (~20/hour) to deter enumerating who is on Kinly. It's an in-memory soft cap
+  per hooks VM — add real rate limiting at your proxy/CDN for production.
+
+> **Not yet end-to-end encrypted.** Messages/media are still stored so the
+> server *could* read them. See [`E2EE.md`](E2EE.md) for the plan to close this
+> — it's the main remaining gap versus Signal.
 
 **Known deferrals** (documented, not bugs): typing indicators (PocketBase has no
 ephemeral channel), fully-backgrounded CallKit-style ringing, and contacts-only
