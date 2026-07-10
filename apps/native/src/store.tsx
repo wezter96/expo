@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import {
   blockUser,
   deleteMessage as deleteMessageRemote,
+  editMessage as editMessageRemote,
   fetchContacts,
   fetchMessages,
   isBlocked as isBlockedRemote,
@@ -37,7 +38,9 @@ type Store = {
   getContact: (id: string) => Contact | undefined;
   findContact: (query: string) => Contact | undefined;
   messagesFor: (contactId: string) => Message[];
-  sendMessage: (contactId: string, text: string) => void;
+  sendMessage: (contactId: string, text: string, replyTo?: string) => void;
+  /** Edit one of my own text messages. */
+  editMessage: (id: string, contactId: string, text: string) => void;
   sendPhoto: (contactId: string, uri: string, caption?: string) => void;
   sendVoice: (contactId: string, uri: string, duration: number) => void;
   /** Retry a message that failed to send. */
@@ -316,11 +319,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const sendMessage = useCallback(
-    (contactId: string, text: string) => {
+    (contactId: string, text: string, replyTo?: string) => {
       const body = text.trim();
-      dispatchSend(contactId, { text: body, kind: 'text' }, (id) => pushMessage(id, contactId, body));
+      dispatchSend(contactId, { text: body, kind: 'text', replyTo }, (id) => pushMessage(id, contactId, body, replyTo));
     },
     [dispatchSend]
+  );
+
+  const editMessage = useCallback(
+    (id: string, contactId: string, text: string) => {
+      const body = text.trim();
+      setState((s) => ({ ...s, messages: s.messages.map((m) => (m.id === id ? { ...m, text: body, edited: true } : m)) }));
+      if (online && uid) {
+        editMessageRemote(id, contactId, body).then((ok) => {
+          if (!ok) void hydrateFromServer();
+        });
+      }
+    },
+    [online, uid, hydrateFromServer]
   );
 
   const sendPhoto = useCallback(
@@ -441,6 +457,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     findContact,
     messagesFor,
     sendMessage,
+    editMessage,
     sendPhoto,
     sendVoice,
     retryMessage,

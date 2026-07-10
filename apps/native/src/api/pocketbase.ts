@@ -141,6 +141,8 @@ function toMessage(r: RecordModel, meId: string | null): Message {
     mine: !!meId && r.author === meId,
     authorId: r.author as string,
     encrypted: !!r.enc,
+    replyTo: (r.replyTo as string) || undefined,
+    edited: !!r.edited,
     at: r.created ? Date.parse(r.created as string) : Date.now(),
   };
 }
@@ -394,10 +396,11 @@ export function newId(): string {
 
 /** Send a text message with a client-provided id. Returns true on success.
  *  Sealed end-to-end when the conversation has E2EE keys; plaintext otherwise. */
-export async function pushMessage(id: string, contactId: string, text: string): Promise<boolean> {
+export async function pushMessage(id: string, contactId: string, text: string, replyTo?: string): Promise<boolean> {
   if (!pb || !pb.authStore.record) return false;
   try {
-    const base = { id, conversation: contactId, author: pb.authStore.record.id, kind: 'text' };
+    const base: Record<string, unknown> = { id, conversation: contactId, author: pb.authStore.record.id, kind: 'text' };
+    if (replyTo) base.replyTo = replyTo;
     const ck = await ensureConvKey(contactId);
     if (ck) {
       await pb
@@ -405,6 +408,24 @@ export async function pushMessage(id: string, contactId: string, text: string): 
         .create({ ...base, enc: true, text: '', keyEpoch: ck.epoch, cipher: e2ee.sealPayload(ck.key, { t: text.trim() }) });
     } else {
       await pb.collection('messages').create({ ...base, text: text.trim() });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Edit one of my own text messages. Re-seals when encrypted. */
+export async function editMessage(messageId: string, contactId: string, text: string): Promise<boolean> {
+  if (!pb || !pb.authStore.record) return false;
+  try {
+    const ck = await ensureConvKey(contactId);
+    if (ck) {
+      await pb
+        .collection('messages')
+        .update(messageId, { edited: true, enc: true, text: '', keyEpoch: ck.epoch, cipher: e2ee.sealPayload(ck.key, { t: text.trim() }) });
+    } else {
+      await pb.collection('messages').update(messageId, { edited: true, text: text.trim() });
     }
     return true;
   } catch {

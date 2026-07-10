@@ -53,6 +53,7 @@ export default function Chat() {
     getContact,
     messagesFor,
     sendMessage,
+    editMessage,
     sendPhoto,
     sendVoice,
     retryMessage,
@@ -68,6 +69,8 @@ export default function Chat() {
     setDisappearing,
   } = useStore();
   const [draft, setDraft] = useState('');
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [editing, setEditing] = useState<Message | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [recording, setRecording] = useState(false);
@@ -168,9 +171,36 @@ export default function Chat() {
   function send() {
     const text = draft.trim();
     if (!text) return;
-    sendMessage(contact!.id, text);
+    if (editing) {
+      editMessage(editing.id, contact!.id, text);
+      setEditing(null);
+    } else {
+      sendMessage(contact!.id, text, replyingTo?.id);
+      setReplyingTo(null);
+    }
     setDraft('');
   }
+
+  function startReply(m: Message) {
+    setEditing(null);
+    setReplyingTo(m);
+  }
+
+  function startEdit(m: Message) {
+    setReplyingTo(null);
+    setEditing(m);
+    setDraft(m.text);
+  }
+
+  function cancelCompose() {
+    setReplyingTo(null);
+    setEditing(null);
+    setDraft('');
+  }
+
+  // Preview text for a quoted/replied message.
+  const previewOf = (m: Message | undefined): string =>
+    !m ? '' : m.kind === 'photo' ? '📷 Photo' : m.kind === 'voice' ? '🎤 Voice message' : m.text;
 
   async function pickPhoto(source: 'camera' | 'library') {
     const perm =
@@ -236,6 +266,23 @@ export default function Chat() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => deleteMessage(messageId) },
     ]);
+  }
+
+  function mineActions(m: Message) {
+    const opts: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [];
+    if (m.kind === 'text') opts.push({ text: 'Edit', onPress: () => startEdit(m) });
+    opts.push({ text: 'Reply', onPress: () => startReply(m) });
+    opts.push({ text: 'Delete', style: 'destructive', onPress: () => promptDelete(m.id) });
+    opts.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Message', undefined, opts);
+  }
+
+  function theirActions(m: Message, spoken: string) {
+    const opts: { text: string; style?: 'cancel'; onPress?: () => void }[] = [{ text: 'Reply', onPress: () => startReply(m) }];
+    if (online) opts.push({ text: 'React', onPress: () => setReactingTo(m.id) });
+    opts.push({ text: 'Read aloud', onPress: () => speak(spoken) });
+    opts.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Message', undefined, opts);
   }
 
   function confirmBlock(userId: string, name: string) {
@@ -409,9 +456,9 @@ export default function Chat() {
               senderAvatar={sender?.avatar}
               reactions={groupReactions(reactions.filter((r) => r.messageId === item.id), meId)}
               canReact={online}
-              onLongPress={() =>
-                item.mine ? promptDelete(item.id) : online ? setReactingTo(item.id) : speak(spoken)
-              }
+              onLongPress={() => (item.mine ? mineActions(item) : theirActions(item, spoken))}
+              onReply={() => startReply(item)}
+              replyPreview={item.replyTo ? previewOf(messages.find((x) => x.id === item.replyTo)) : undefined}
               onReact={online ? () => setReactingTo(item.id) : undefined}
               onTapReaction={(emoji) => online && toggleReaction(item.id, emoji)}
               onRetry={() => retryMessage(item.id)}
@@ -469,6 +516,21 @@ export default function Chat() {
           </Pressable>
         </View>
       ) : (
+      <>
+      {replyingTo || editing ? (
+        <View style={styles.composeBar}>
+          <Ionicons name={editing ? 'pencil' : 'arrow-undo'} size={18} color={colors.primary} />
+          <View style={styles.composeBarText}>
+            <Text style={styles.composeBarTitle}>{editing ? 'Editing message' : `Replying to ${replyingTo && !replyingTo.mine ? contact.name : 'yourself'}`}</Text>
+            <Text style={styles.composeBarPreview} numberOfLines={1}>
+              {previewOf(editing ?? replyingTo ?? undefined)}
+            </Text>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={cancelCompose} hitSlop={10}>
+            <Ionicons name="close-circle" size={24} color={colors.textMuted} />
+          </Pressable>
+        </View>
+      ) : null}
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
         {recording ? (
           <>
@@ -534,6 +596,7 @@ export default function Chat() {
           </>
         )}
       </View>
+      </>
       )}
     </KeyboardAvoidingView>
   );
@@ -581,6 +644,8 @@ function Bubble({
   reactions,
   canReact,
   onLongPress,
+  onReply,
+  replyPreview,
   onReact,
   onTapReaction,
   onRetry,
@@ -596,6 +661,8 @@ function Bubble({
   reactions: GroupedReaction[];
   canReact: boolean;
   onLongPress: () => void;
+  onReply: () => void;
+  replyPreview?: string;
   onReact?: () => void;
   onTapReaction: (emoji: string) => void;
   onRetry: () => void;
@@ -637,6 +704,14 @@ function Bubble({
           <Text style={[styles.sender, senderColor ? { color: senderColor } : null]}>{senderName}</Text>
         ) : null}
 
+        {replyPreview !== undefined ? (
+          <View style={[styles.quote, mine ? styles.quoteMine : styles.quoteTheirs]}>
+            <Text style={[styles.quoteText, mine ? styles.textMine : styles.textTheirs]} numberOfLines={1}>
+              {replyPreview || 'Message'}
+            </Text>
+          </View>
+        ) : null}
+
         {message.kind === 'photo' && photoUri ? (
           <Pressable
             accessibilityRole="imagebutton"
@@ -672,7 +747,11 @@ function Bubble({
           ) : null}
           <Text style={[styles.time, mine ? styles.timeMine : styles.timeTheirs]}>
             {clockTime(message.at)}
+            {message.edited ? ' · edited' : ''}
           </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Reply to this message" onPress={onReply} hitSlop={10}>
+            <Ionicons name="arrow-undo" size={20} color={mine ? '#D6E5F5' : colors.primary} />
+          </Pressable>
           {!mine && (
             <>
               <Pressable
@@ -799,6 +878,23 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   bubbleMine: { backgroundColor: colors.bubbleMine, borderBottomRightRadius: radius.sm },
   bubbleTheirs: { backgroundColor: colors.bubbleTheirs, borderBottomLeftRadius: radius.sm },
   sender: { fontSize: fonts.small - 1, fontWeight: '800', color: colors.primary, marginBottom: 2 },
+  quote: { borderLeftWidth: 3, paddingLeft: spacing.sm, marginBottom: 4, paddingVertical: 2 },
+  quoteMine: { borderLeftColor: '#D6E5F5' },
+  quoteTheirs: { borderLeftColor: colors.primary },
+  quoteText: { fontSize: fonts.small, opacity: 0.85 },
+  composeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.bubbleTheirs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  composeBarText: { flex: 1 },
+  composeBarTitle: { fontSize: fonts.small - 1, fontWeight: '800', color: colors.primary },
+  composeBarPreview: { fontSize: fonts.small, color: colors.textMuted },
   photo: { width: 220, height: 220, borderRadius: radius.md, marginBottom: 4, backgroundColor: colors.border },
   linkWarn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   linkWarnText: { flex: 1, fontSize: fonts.small - 2, color: colors.warning, fontWeight: '700' },

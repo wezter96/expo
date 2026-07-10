@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useMemo } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../src/components/Avatar';
 import { useStore } from '../../src/store';
-import { Contact } from '../../src/types';
+import { Contact, Message } from '../../src/types';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET, UNREAD_BADGE } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
 import { relativeTime } from '../../src/time';
@@ -17,6 +17,23 @@ export default function Messages() {
     useStore();
   const { colors, fonts } = useTheme();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+
+  // Search across people (name/relation) and message text.
+  const peopleHits = q
+    ? conversations.filter(
+        (c) => c.contact.name.toLowerCase().includes(q) || (c.contact.relation ?? '').toLowerCase().includes(q)
+      )
+    : [];
+  const messageHits = q
+    ? conversations
+        .flatMap(({ contact, messages }) =>
+          messages.filter((m) => (m.text ?? '').toLowerCase().includes(q)).map((m) => ({ contact, m }))
+        )
+        .sort((a, b) => b.m.at - a.m.at)
+        .slice(0, 40)
+    : [];
 
   function favorite(contact: Contact) {
     const fav = isFavorite(contact.id);
@@ -69,7 +86,34 @@ export default function Messages() {
         </Pressable>
       ) : null}
 
-      {!ready ? (
+      <View style={styles.searchBar}>
+        <Ionicons name="search" size={22} color={colors.textMuted} />
+        <TextInput
+          style={styles.searchInput}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search messages and people"
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {query ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setQuery('')} hitSlop={10}>
+            <Ionicons name="close-circle" size={22} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
+      </View>
+
+      {q ? (
+        <SearchResults
+          styles={styles}
+          colors={colors}
+          people={peopleHits.map((c) => c.contact)}
+          messageHits={messageHits}
+          onOpen={(id) => router.push(`/chat/${id}`)}
+        />
+      ) : !ready ? (
         <Text style={styles.muted}>Loading…</Text>
       ) : conversations.length === 0 ? (
         <View style={styles.emptyWrap}>
@@ -162,9 +206,95 @@ export default function Messages() {
   );
 }
 
+function SearchResults({
+  styles,
+  colors,
+  people,
+  messageHits,
+  onOpen,
+}: {
+  styles: ReturnType<typeof makeStyles>;
+  colors: Colors;
+  people: Contact[];
+  messageHits: { contact: Contact; m: Message }[];
+  onOpen: (id: string) => void;
+}) {
+  if (!people.length && !messageHits.length) {
+    return <Text style={styles.muted}>No matches. Try a different word.</Text>;
+  }
+  return (
+    <>
+      {people.length ? <Text style={styles.searchHeading}>People</Text> : null}
+      {people.map((c) => (
+        <Pressable
+          key={c.id}
+          accessibilityRole="button"
+          accessibilityLabel={`Open chat with ${c.name}`}
+          onPress={() => onOpen(c.id)}
+          style={({ pressed }) => [styles.resultRow, pressed && styles.pressed]}
+        >
+          <Avatar name={c.name} isGroup={c.isGroup} uri={c.avatar} size={48} />
+          <Text style={styles.resultName} numberOfLines={1}>
+            {c.name}
+          </Text>
+        </Pressable>
+      ))}
+      {messageHits.length ? <Text style={styles.searchHeading}>Messages</Text> : null}
+      {messageHits.map(({ contact, m }, i) => (
+        <Pressable
+          key={`${m.id}-${i}`}
+          accessibilityRole="button"
+          accessibilityLabel={`Open message from ${contact.name}: ${m.text}`}
+          onPress={() => onOpen(contact.id)}
+          style={({ pressed }) => [styles.resultRow, pressed && styles.pressed]}
+        >
+          <Avatar name={contact.name} isGroup={contact.isGroup} uri={contact.avatar} size={48} />
+          <View style={styles.resultText}>
+            <Text style={styles.resultName} numberOfLines={1}>
+              {contact.name}
+            </Text>
+            <Text style={styles.resultSnippet} numberOfLines={1}>
+              {m.mine ? 'You: ' : ''}
+              {m.text}
+            </Text>
+          </View>
+          <Text style={styles.resultTime}>{relativeTime(m.at)}</Text>
+        </Pressable>
+      ))}
+    </>
+  );
+}
+
 function makeStyles(colors: Colors, fonts: Fonts) {
   return StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.sm },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: TAP_TARGET - 8,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  searchInput: { flex: 1, fontSize: fonts.body, color: colors.text, paddingVertical: spacing.sm },
+  searchHeading: { fontSize: fonts.small, fontWeight: '800', color: colors.textMuted, marginTop: spacing.sm, textTransform: 'uppercase' },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  resultText: { flex: 1 },
+  resultName: { flex: 1, fontSize: fonts.body + 1, fontWeight: '800', color: colors.text },
+  resultSnippet: { fontSize: fonts.small, color: colors.textMuted, marginTop: 2 },
+  resultTime: { fontSize: fonts.small - 2, color: colors.textMuted },
   muted: { fontSize: fonts.body, color: colors.textMuted, padding: spacing.md },
   sos: {
     flexDirection: 'row',

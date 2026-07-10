@@ -40,6 +40,10 @@ export type Message = {
   encrypted?: boolean;
   /** base64 per-file media key (encrypted messages only) — used to decrypt the file for display. */
   mediaKey?: string;
+  /** id of the message this one is replying to, if any. */
+  replyTo?: string;
+  /** true if the author edited this message. */
+  edited?: boolean;
   /** epoch millis */
   at: number;
 };

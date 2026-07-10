@@ -125,6 +125,14 @@ migrate(
       ],
       indexes: ['CREATE INDEX idx_messages_conversation ON messages (conversation, created)'],
     });
+    // Reply-to: a self-referential relation (added after creation so it can
+    // point at the messages collection itself). Also allow the author to edit
+    // their own message (updateRule) and mark it edited.
+    messages.fields.add(
+      new Field({ type: 'relation', name: 'replyTo', maxSelect: 1, cascadeDelete: false, collectionId: messages.id })
+    );
+    messages.fields.add(new Field({ type: 'bool', name: 'edited' }));
+    messages.updateRule = '@request.auth.id != "" && author.id ?= @request.auth.id';
     app.save(messages);
 
     // --- reactions (one emoji per user per message) ---------------------
