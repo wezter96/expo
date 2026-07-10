@@ -202,6 +202,32 @@ export function currentUsername(): string {
   return (pb?.authStore.record?.username as string) ?? '';
 }
 
+// --- family check-in -------------------------------------------------------
+
+/** Record that the user is OK right now. */
+export async function checkIn(): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  await pb.collection('users').update(pb.authStore.record.id, { lastCheckIn: new Date().toISOString() });
+  await pb.collection('users').authRefresh();
+}
+
+/** Set (or clear) the caregiver who is alerted if you miss a check-in. */
+export async function setCaregiver(userId: string | null): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  await pb.collection('users').update(pb.authStore.record.id, { caregiver: userId ?? '' });
+  await pb.collection('users').authRefresh();
+}
+
+export function caregiverId(): string {
+  return (pb?.authStore.record?.caregiver as string) ?? '';
+}
+
+/** Epoch millis of the last check-in, or 0. */
+export function lastCheckInAt(): number {
+  const v = pb?.authStore.record?.lastCheckIn as string | undefined;
+  return v ? Date.parse(v) : 0;
+}
+
 /** Create a group conversation. Returns the conversation id. */
 export async function createGroup(title: string, memberIds: string[]): Promise<string | null> {
   if (!pb || !pb.authStore.record) return null;

@@ -16,6 +16,7 @@ import { AuthScreen } from '../src/auth/AuthScreen';
 import { IncomingCallOverlay } from '../src/calls/IncomingCallOverlay';
 import { WebNotice } from '../src/components/WebNotice';
 import { applyGlobalFont } from '../src/global-font';
+import { Onboarding } from '../src/onboarding/Onboarding';
 import { StoreProvider } from '../src/store';
 import { ThemeProvider, useTheme } from '../src/theme-context';
 
@@ -64,6 +65,7 @@ function Gate() {
         <Stack.Screen name="new-group" options={{ title: 'New group', presentation: 'modal' }} />
         <Stack.Screen name="profile" options={{ title: 'Your profile', presentation: 'modal' }} />
         <Stack.Screen name="emergency" options={{ title: 'Emergency contact', presentation: 'modal' }} />
+        <Stack.Screen name="checkin" options={{ title: 'Daily check-in', presentation: 'modal' }} />
         <Stack.Screen name="group/[id]" options={{ title: 'Group', presentation: 'modal' }} />
         <Stack.Screen name="display" options={{ title: 'Display', presentation: 'modal' }} />
         <Stack.Screen name="encryption" options={{ title: 'Encryption', presentation: 'modal' }} />
@@ -107,6 +109,7 @@ export default function RootLayout() {
                 <WebNotice />
                 <Gate />
                 <LockOverlay />
+                <Onboarding />
               </StoreProvider>
             </AuthProvider>
           </AppLockProvider>

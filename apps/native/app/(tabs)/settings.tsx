@@ -88,6 +88,13 @@ export default function Settings() {
       onPress: () => router.push('/emergency'),
     },
     {
+      icon: 'heart',
+      label: 'Daily check-in',
+      value: 'Let your family know you’re OK',
+      color: colors.accent,
+      onPress: () => router.push('/checkin'),
+    },
+    {
       icon: 'help-circle',
       label: 'Help',
       onPress: () =>

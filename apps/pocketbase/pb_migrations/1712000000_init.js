@@ -30,6 +30,12 @@ migrate(
     users.fields.add(new Field({ type: 'text', name: 'prekeyKey', max: 100 }));
     // Post-quantum public key (ML-KEM-768, base64 ≈ 1580 chars) for hybrid wrap.
     users.fields.add(new Field({ type: 'text', name: 'kemKey', max: 2000 }));
+    // Family check-in: last time the user tapped "I'm OK", and the caregiver who
+    // is alerted if they miss a day.
+    users.fields.add(new Field({ type: 'date', name: 'lastCheckIn' }));
+    users.fields.add(
+      new Field({ type: 'relation', name: 'caregiver', collectionId: users.id, cascadeDelete: false, maxSelect: 1 })
+    );
     users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
     users.indexes.push("CREATE UNIQUE INDEX idx_users_username ON users (username) WHERE username != ''");
     // Any signed-in user can view a user record (needed to show names & photos
@@ -252,7 +258,7 @@ migrate(
     }
     try {
       const users = app.findCollectionByNameOrId('users');
-      for (const f of ['phone', 'username', 'pushToken', 'lastSeen', 'blocked', 'identityKey', 'prekeyKey', 'kemKey']) {
+      for (const f of ['phone', 'username', 'pushToken', 'lastSeen', 'blocked', 'identityKey', 'prekeyKey', 'kemKey', 'lastCheckIn', 'caregiver']) {
         if (users.fields.getByName(f)) users.fields.removeByName(f);
       }
       app.save(users);

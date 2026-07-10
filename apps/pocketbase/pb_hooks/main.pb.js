@@ -496,6 +496,51 @@ onRecordAfterCreateSuccess((e) => {
 // hide expired messages immediately so they don't linger until the sweep.
 // ===========================================================================
 
+// Family check-in: once an hour, if someone with a caregiver hasn't checked in
+// for ~30h, push their caregiver so a family member can look in on them.
+cronAdd('checkin_sweep', '0 * * * *', () => {
+  try {
+    const now = Date.now();
+    const cutoff = new Date(now - 30 * 60 * 60 * 1000).toISOString().replace('T', ' ');
+    // users with a caregiver whose last check-in is stale (or never)
+    const stale = $app.findRecordsByFilter(
+      'users',
+      "caregiver != '' && (lastCheckIn = '' || lastCheckIn < {:t})",
+      '',
+      500,
+      0,
+      { t: cutoff }
+    );
+    const messages = [];
+    for (const u of stale) {
+      let token = '';
+      try {
+        token = $app.findRecordById('users', u.getString('caregiver')).getString('pushToken');
+      } catch (_) {}
+      if (token) {
+        messages.push({
+          to: token,
+          title: 'Check in on ' + (u.getString('name') || 'your family member'),
+          body: (u.getString('name') || 'They') + " hasn't checked in on Kinly today. A quick call might be nice.",
+          sound: 'default',
+          data: { conversationId: '' },
+        });
+      }
+    }
+    if (messages.length > 0) {
+      $http.send({
+        url: 'https://exp.host/--/api/v2/push/send',
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify(messages),
+        timeout: 20,
+      });
+    }
+  } catch (err) {
+    $app.logger().error('check-in sweep failed', 'error', String(err));
+  }
+});
+
 cronAdd('disappearing_sweep', '*/15 * * * *', () => {
   try {
     const convs = $app.findRecordsByFilter('conversations', 'disappearTimer > 0', '', 1000, 0);
