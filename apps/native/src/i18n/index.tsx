@@ -88,6 +88,11 @@ const en: Record<string, string> = {
   'settings.signOutConfirm': 'Are you sure you want to sign out?',
 
   'chat.writeMessage': 'Write a message…',
+  'chat.photos': 'Photos',
+
+  'album.title': 'Photos',
+  'album.empty': 'No photos yet',
+  'album.emptyBody': 'Photos you and {name} share will appear here.',
 
   'display.textSize': 'Text size',
   'display.appearance': 'Appearance',
@@ -178,6 +183,11 @@ const sv: Record<string, string> = {
   'settings.signOutConfirm': 'Är du säker på att du vill logga ut?',
 
   'chat.writeMessage': 'Skriv ett meddelande…',
+  'chat.photos': 'Foton',
+
+  'album.title': 'Foton',
+  'album.empty': 'Inga foton än',
+  'album.emptyBody': 'Foton som du och {name} delar visas här.',
 
   'display.textSize': 'Textstorlek',
   'display.appearance': 'Utseende',

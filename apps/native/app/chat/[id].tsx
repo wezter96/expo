@@ -354,6 +354,7 @@ export default function Chat() {
     const timer = disappearTimerFor(contact!.id);
     const opts: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [
       { text: fav ? 'Remove from favorites' : 'Add to favorites', onPress: () => toggleFavorite(contact!.id) },
+      { text: t('chat.photos'), onPress: () => router.push(`/album/${contact!.id}`) },
       {
         text: `Disappearing messages: ${disappearingLabel(timer)}`,
         onPress: disappearingMenu,
