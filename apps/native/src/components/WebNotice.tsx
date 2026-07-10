@@ -19,14 +19,18 @@ export function WebNotice() {
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [hidden, setHidden] = useState(true);
 
+  // Show only in a bare browser tab — not on native, and not inside the
+  // Electron desktop app (which provides real secure storage for E2EE).
+  const isBareWeb = Platform.OS === 'web' && !(globalThis as { kinlySecureStore?: unknown }).kinlySecureStore;
+
   useEffect(() => {
-    if (Platform.OS !== 'web') return;
+    if (!isBareWeb) return;
     AsyncStorage.getItem(KEY)
       .then((v) => setHidden(v === '1'))
       .catch(() => setHidden(false));
-  }, []);
+  }, [isBareWeb]);
 
-  if (Platform.OS !== 'web' || hidden) return null;
+  if (!isBareWeb || hidden) return null;
 
   const dismiss = () => {
     setHidden(true);

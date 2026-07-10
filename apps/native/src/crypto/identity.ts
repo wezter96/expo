@@ -8,27 +8,24 @@
  */
 import { entropyToMnemonic, mnemonicToEntropy, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 import { fromB64, generateKeyPair, type KeyPair, publicKeyOf, toB64 } from './primitives';
+import { secureDelete, secureGet, secureSet, secureStorageAvailable } from './secure-store';
 
 const ID_KEY = 'kinly_e2ee_identity_v1';
 const PREKEY_KEY = 'kinly_e2ee_prekey_v1';
 
-/** E2EE needs device secure storage; not available on web. */
-export const e2eeSupported = Platform.OS !== 'web';
+/** E2EE needs OS secure storage — native or the Electron desktop app, not a bare browser. */
+export const e2eeSupported = secureStorageAvailable;
 
 async function loadKeyPair(name: string): Promise<KeyPair | null> {
-  const b = await SecureStore.getItemAsync(name);
+  const b = await secureGet(name);
   if (!b) return null;
   const secretKey = fromB64(b);
   return { secretKey, publicKey: publicKeyOf(secretKey) };
 }
 
 async function saveSecret(name: string, secretKey: Uint8Array): Promise<void> {
-  await SecureStore.setItemAsync(name, toB64(secretKey), {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-  });
+  await secureSet(name, toB64(secretKey));
 }
 
 /** The device's long-term identity keypair (created on first use). */
@@ -71,6 +68,6 @@ export async function restoreFromPhrase(phrase: string): Promise<void> {
 
 /** Forget all keys (e.g. sign-out on a shared device). History becomes unreadable. */
 export async function resetIdentity(): Promise<void> {
-  await SecureStore.deleteItemAsync(ID_KEY).catch(() => {});
-  await SecureStore.deleteItemAsync(PREKEY_KEY).catch(() => {});
+  await secureDelete(ID_KEY).catch(() => {});
+  await secureDelete(PREKEY_KEY).catch(() => {});
 }
