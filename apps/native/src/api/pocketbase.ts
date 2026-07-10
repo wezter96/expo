@@ -215,10 +215,12 @@ export async function renameGroup(conversationId: string, title: string): Promis
   await pb.collection('conversations').update(conversationId, { title: title.trim() });
 }
 
-/** Replace a group's member list (add / remove / leave). */
+/** Replace a group's member list (add / remove / leave). Rotates the
+ *  conversation key so a removed member can't read future messages. */
 export async function updateGroupMembers(conversationId: string, memberIds: string[]): Promise<void> {
   if (!pb) return;
   await pb.collection('conversations').update(conversationId, { members: Array.from(new Set(memberIds)) });
+  await rotateConvKey(conversationId);
 }
 
 // --- end-to-end encryption -------------------------------------------------
@@ -238,14 +240,40 @@ export async function publishE2EEKeys(): Promise<void> {
   }
 }
 
-// In-memory cache of unwrapped conversation keys (this session only).
+// In-memory cache of unwrapped conversation keys, keyed by `${convId}:${epoch}`.
 const convKeyCache = new Map<string, Uint8Array>();
 
-/** Fetch + unwrap my conversation key, if one has been published for me. */
-async function getConvKey(conversationId: string): Promise<Uint8Array | null> {
+async function unwrapRow(row: RecordModel): Promise<Uint8Array | null> {
+  const wrappedBy = (row.expand as { wrappedBy?: RecordModel } | undefined)?.wrappedBy;
+  const identity = wrappedBy?.identityKey as string | undefined;
+  if (!row.wrappedKey || !identity) return null;
+  return e2ee.unwrapConvKey(row.wrappedKey as string, identity);
+}
+
+/** The conversation key for a specific epoch (older messages use older keys). */
+async function convKeyForEpoch(conversationId: string, epoch: number): Promise<Uint8Array | null> {
   if (!pb || !pb.authStore.record || !e2ee.e2eeSupported) return null;
-  const cached = convKeyCache.get(conversationId);
+  const cacheKey = `${conversationId}:${epoch}`;
+  const cached = convKeyCache.get(cacheKey);
   if (cached) return cached;
+  try {
+    const row = await pb
+      .collection('conversation_keys')
+      .getFirstListItem(
+        pb.filter('conversation = {:c} && member = {:m} && epoch = {:e}', { c: conversationId, m: pb.authStore.record.id, e: epoch }),
+        { expand: 'wrappedBy' }
+      );
+    const key = await unwrapRow(row);
+    if (key) convKeyCache.set(cacheKey, key);
+    return key;
+  } catch {
+    return null;
+  }
+}
+
+/** My latest conversation key + its epoch, if one has been published for me. */
+async function latestConvKey(conversationId: string): Promise<{ key: Uint8Array; epoch: number } | null> {
+  if (!pb || !pb.authStore.record || !e2ee.e2eeSupported) return null;
   try {
     const row = await pb
       .collection('conversation_keys')
@@ -253,44 +281,65 @@ async function getConvKey(conversationId: string): Promise<Uint8Array | null> {
         sort: '-epoch',
         expand: 'wrappedBy',
       });
-    const wrappedBy = (row.expand as { wrappedBy?: RecordModel } | undefined)?.wrappedBy;
-    const identity = wrappedBy?.identityKey as string | undefined;
-    if (row.wrappedKey && identity) {
-      const key = await e2ee.unwrapConvKey(row.wrappedKey as string, identity);
-      convKeyCache.set(conversationId, key);
-      return key;
-    }
+    const key = await unwrapRow(row);
+    if (!key) return null;
+    const epoch = (row.epoch as number) ?? 0;
+    convKeyCache.set(`${conversationId}:${epoch}`, key);
+    return { key, epoch };
   } catch {
-    // no key wrapped for me yet
+    return null;
   }
-  return null;
+}
+
+/** Generate + distribute a new conversation key at `epoch`, wrapped per member. */
+async function distributeKey(conversationId: string, members: RecordModel[], epoch: number): Promise<Uint8Array> {
+  const key = e2ee.newConvKey();
+  for (const m of members) {
+    const wrapped = await e2ee.wrapConvKeyFor(m.identityKey as string, key);
+    await pb!
+      .collection('conversation_keys')
+      .create({ conversation: conversationId, member: m.id, wrappedBy: pb!.authStore.record!.id, epoch, wrappedKey: wrapped });
+  }
+  convKeyCache.set(`${conversationId}:${epoch}`, key);
+  return key;
 }
 
 /**
- * Get the conversation key, creating + distributing one if none exists and all
- * members have published identity keys. Returns null when E2EE can't be used
+ * Get the current conversation key + epoch, creating one at epoch 0 if none
+ * exists and all members can do E2EE. Returns null when E2EE isn't possible
  * (unsupported, or a member has no key yet) — callers fall back to plaintext.
  */
-async function ensureConvKey(conversationId: string): Promise<Uint8Array | null> {
-  const existing = await getConvKey(conversationId);
+async function ensureConvKey(conversationId: string): Promise<{ key: Uint8Array; epoch: number } | null> {
+  const existing = await latestConvKey(conversationId);
   if (existing) return existing;
   if (!pb || !pb.authStore.record || !e2ee.e2eeSupported) return null;
   try {
     const conv = await pb.collection('conversations').getOne(conversationId, { expand: 'members' });
     const members = ((conv.expand as { members?: RecordModel[] } | undefined)?.members ?? []) as RecordModel[];
-    if (!members.length || members.some((m) => !m.identityKey)) return null; // someone can't do E2EE yet
-    const key = e2ee.newConvKey();
-    for (const m of members) {
-      const wrapped = await e2ee.wrapConvKeyFor(m.identityKey as string, key);
-      await pb
-        .collection('conversation_keys')
-        .create({ conversation: conversationId, member: m.id, wrappedBy: pb.authStore.record.id, epoch: 0, wrappedKey: wrapped });
-    }
-    convKeyCache.set(conversationId, key);
-    return key;
+    if (!members.length || members.some((m) => !m.identityKey)) return null;
+    const key = await distributeKey(conversationId, members, 0);
+    return { key, epoch: 0 };
   } catch {
-    // a concurrent creator may have won the unique index — try reading theirs
-    return getConvKey(conversationId);
+    return latestConvKey(conversationId); // a concurrent creator may have won
+  }
+}
+
+/**
+ * Rotate the conversation key (forward secrecy): mint a new key at the next
+ * epoch for the current member set. Call after someone leaves/joins so past
+ * keys — and anyone removed — can't read future messages.
+ */
+export async function rotateConvKey(conversationId: string): Promise<void> {
+  if (!pb || !pb.authStore.record || !e2ee.e2eeSupported) return;
+  try {
+    const latest = await latestConvKey(conversationId);
+    const nextEpoch = (latest?.epoch ?? -1) + 1;
+    const conv = await pb.collection('conversations').getOne(conversationId, { expand: 'members' });
+    const members = ((conv.expand as { members?: RecordModel[] } | undefined)?.members ?? []) as RecordModel[];
+    if (!members.length || members.some((m) => !m.identityKey)) return;
+    await distributeKey(conversationId, members, nextEpoch);
+  } catch {
+    // best-effort; next send will still use the existing key
   }
 }
 
@@ -299,7 +348,7 @@ async function ensureConvKey(conversationId: string): Promise<Uint8Array | null>
 async function decryptMessage(r: RecordModel): Promise<{ text: string; mediaKey?: string }> {
   if (!r.enc) return { text: (r.text as string) ?? '' };
   try {
-    const key = await getConvKey(r.conversation as string);
+    const key = await convKeyForEpoch(r.conversation as string, (r.keyEpoch as number) ?? 0);
     if (!key) return { text: '🔒 Encrypted — unlock on your other device' };
     const p = e2ee.openPayload(key, r.cipher as string);
     return { text: p.t, mediaKey: p.m?.key };
@@ -349,9 +398,11 @@ export async function pushMessage(id: string, contactId: string, text: string): 
   if (!pb || !pb.authStore.record) return false;
   try {
     const base = { id, conversation: contactId, author: pb.authStore.record.id, kind: 'text' };
-    const key = await ensureConvKey(contactId);
-    if (key) {
-      await pb.collection('messages').create({ ...base, enc: true, text: '', cipher: e2ee.sealPayload(key, { t: text.trim() }) });
+    const ck = await ensureConvKey(contactId);
+    if (ck) {
+      await pb
+        .collection('messages')
+        .create({ ...base, enc: true, text: '', keyEpoch: ck.epoch, cipher: e2ee.sealPayload(ck.key, { t: text.trim() }) });
     } else {
       await pb.collection('messages').create({ ...base, text: text.trim() });
     }
@@ -374,8 +425,8 @@ export async function pushPhoto(id: string, contactId: string, uri: string, capt
   if (!pb || !pb.authStore.record) return false;
   try {
     const author = pb.authStore.record.id;
-    const key = await ensureConvKey(contactId);
-    if (key) {
+    const ck = await ensureConvKey(contactId);
+    if (ck) {
       const { encUri, keyB64 } = await e2ee.encryptFileToTemp(uri);
       const form = fileField(encUri, 'image', 'photo.enc', 'application/octet-stream');
       form.append('id', id);
@@ -384,7 +435,8 @@ export async function pushPhoto(id: string, contactId: string, uri: string, capt
       form.append('kind', 'photo');
       form.append('enc', 'true');
       form.append('text', '');
-      form.append('cipher', e2ee.sealPayload(key, { t: caption.trim(), m: { key: keyB64, kind: 'photo' } }));
+      form.append('keyEpoch', String(ck.epoch));
+      form.append('cipher', e2ee.sealPayload(ck.key, { t: caption.trim(), m: { key: keyB64, kind: 'photo' } }));
       await pb.collection('messages').create(form);
     } else {
       const form = fileField(uri, 'image', 'photo.jpg', 'image/jpeg');
@@ -406,8 +458,8 @@ export async function pushVoice(id: string, contactId: string, uri: string, dura
   if (!pb || !pb.authStore.record) return false;
   try {
     const author = pb.authStore.record.id;
-    const key = await ensureConvKey(contactId);
-    if (key) {
+    const ck = await ensureConvKey(contactId);
+    if (ck) {
       const { encUri, keyB64 } = await e2ee.encryptFileToTemp(uri);
       const form = fileField(encUri, 'audio', 'voice.enc', 'application/octet-stream');
       form.append('id', id);
@@ -417,7 +469,8 @@ export async function pushVoice(id: string, contactId: string, uri: string, dura
       form.append('enc', 'true');
       form.append('text', '');
       form.append('duration', String(Math.round(duration)));
-      form.append('cipher', e2ee.sealPayload(key, { t: '', m: { key: keyB64, kind: 'voice', duration: Math.round(duration) } }));
+      form.append('keyEpoch', String(ck.epoch));
+      form.append('cipher', e2ee.sealPayload(ck.key, { t: '', m: { key: keyB64, kind: 'voice', duration: Math.round(duration) } }));
       await pb.collection('messages').create(form);
     } else {
       const form = fileField(uri, 'audio', 'voice.m4a', 'audio/m4a');

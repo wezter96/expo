@@ -110,9 +110,11 @@ migrate(
         { type: 'text', name: 'text', max: 2000 },
         // End-to-end encryption: when enc = true, `text` is empty and the real
         // content (and any media key) is inside `cipher` (base64 AEAD). Media
-        // files in image/audio are then ciphertext blobs.
+        // files in image/audio are then ciphertext blobs. keyEpoch records which
+        // conversation-key epoch sealed it (keys rotate on membership change).
         { type: 'bool', name: 'enc' },
         { type: 'text', name: 'cipher', max: 30000 },
+        { type: 'number', name: 'keyEpoch', min: 0 },
         { type: 'file', name: 'image', maxSelect: 1, maxSize: 10485760, mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] },
         { type: 'file', name: 'audio', maxSelect: 1, maxSize: 10485760, mimeTypes: ['audio/mp4', 'audio/m4a', 'audio/mpeg', 'audio/aac', 'audio/webm'] },
         // voice message length in seconds

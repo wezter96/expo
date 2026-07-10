@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
@@ -19,6 +20,7 @@ import { useTheme } from '../src/theme-context';
 
 export default function Encryption() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { colors, fonts } = useTheme();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [phrase, setPhrase] = useState<string | null>(null);
@@ -89,6 +91,15 @@ export default function Encryption() {
             Kinly locks your messages so only you and the people you talk to can read them — not even we can.
           </Text>
         </View>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/link-device')}
+          style={({ pressed }) => [styles.secondary, pressed && styles.dim]}
+        >
+          <Ionicons name="qr-code" size={22} color={colors.primary} />
+          <Text style={styles.secondaryText}>Add another device</Text>
+        </Pressable>
 
         <Text style={styles.label}>Recovery phrase</Text>
         <Text style={styles.hint}>

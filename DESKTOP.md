@@ -23,10 +23,10 @@ other device" — which the recovery phrase already does:
 > would have *broken* multi-device. Forward secrecy is provided by **key
 > rotation** instead (rotate the conversation key on membership change).
 
-**Planned enhancement — QR device linking:** instead of typing 24 words, show a
-QR on device A that encodes the identity secret (encrypted with a short PIN),
-scan it on device B. Purely a UX improvement over the phrase; same underlying
-model. Needs a QR renderer + `expo-camera` scanner.
+**QR device linking (done):** instead of typing 24 words, Settings → Encryption
+→ *Add another device* shows a QR + 6-digit PIN on device A; device B scans it
+and enters the PIN to import the identity key. The QR is useless without the
+PIN (PBKDF2-stretched). See `crypto/linking.ts` + `app/link-device.tsx`.
 
 ## Desktop app (Electron)
 
@@ -73,5 +73,6 @@ Point the web build at your server the same way as the app
 | Multi-device via shared identity (recovery phrase) | ✅ Works with current model |
 | Pluggable secure storage (native / desktop / web) | ✅ Built (`secure-store.ts`) |
 | Electron shell + safeStorage bridge | ✅ Scaffolded (unbuilt here) |
-| QR device linking | ⏳ Designed |
+| QR device linking | ✅ Built (`link-device.tsx`) |
+| Conversation-key rotation (forward secrecy) | ✅ Wired (rotates on membership change) |
 | Code signing / notarization / auto-update | ⏳ Not started |

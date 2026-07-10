@@ -58,6 +58,12 @@ export async function recoveryPhrase(): Promise<string> {
   return entropyToMnemonic(id.secretKey, wordlist);
 }
 
+/** Import a raw 32-byte identity secret (used by QR device linking). */
+export async function importIdentitySecret(secretKey: Uint8Array): Promise<void> {
+  if (secretKey.length !== 32) throw new Error('Invalid key length.');
+  await saveSecret(ID_KEY, secretKey);
+}
+
 /** Restore an identity from its recovery phrase (e.g. on a new device). */
 export async function restoreFromPhrase(phrase: string): Promise<void> {
   const clean = phrase.trim().toLowerCase().replace(/\s+/g, ' ');

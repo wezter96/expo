@@ -19,15 +19,24 @@ user has to understand.**
   **text messages are sealed on send and opened on receive** with graceful
   plaintext fallback when a member has no key yet. A 🔒 banner shows in
   encrypted chats.
-- ⏳ **Media encryption** — helpers exist + are tested, but photo/voice **files
-  are not yet encrypted** in the live path (only text is). This is the next
-  wiring step; until then, media in an otherwise-encrypted chat is not E2E
-  protected.
-- ⏳ **Forward secrecy (ratchet/sender-keys) live** — the primitives are built
-  and tested but not yet driving live messages; needs the session-handshake
-  design below to be finalized and tested.
-- ⏳ **Key backup to OS cloud keychain** and **multi-device pairing** — designed
-  below, not built (recovery-phrase backup works today).
+- ✅ **Media encryption live** — photo/voice files are encrypted with a per-file
+  key (carried in the sealed payload) before upload, and decrypted on the fly
+  for display (`crypto/media-io.ts`, chat `useDisplayUri`).
+- ✅ **Forward secrecy via key rotation** — the conversation key rotates to a
+  new epoch on membership change (`rotateConvKey`, wired into
+  `updateGroupMembers`); each message records its `keyEpoch`. A removed member
+  can't read messages sent after they left. (We use rotation rather than a live
+  pairwise Double Ratchet because the ratchet can't be shared across devices —
+  see DESKTOP.md. The Double Ratchet + sender keys remain built + Node-tested
+  for a future single-device mode.)
+- ✅ **Multi-device** — any device with your identity key reads your chats;
+  restore via the 24-word phrase or **QR device linking** (`crypto/linking.ts`,
+  `app/link-device.tsx`: show a QR + 6-digit PIN on one device, scan on the
+  other). Linking crypto is Node-tested (`linking.test.ts`).
+- ⏳ **Key backup to OS cloud keychain** — designed; recovery-phrase + QR link
+  cover backup/transfer today.
+- ⏳ **Sealed sender, private contact discovery, PQ** — not started (see the
+  "compete with Signal" analysis).
 
 > ⚠️ **The crypto has NOT had a professional audit.** Home-grown protocol wiring
 > (X3DH-lite, ratchet integration) especially must be reviewed by a
