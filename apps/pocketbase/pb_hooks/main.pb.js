@@ -11,13 +11,14 @@ function userBrief(id) {
       id: u.id,
       name: u.getString('name') || u.getString('email') || 'Someone',
       phone: u.getString('phone') || '',
+      username: u.getString('username') || '',
       avatar: u.getString('avatar') || '',
       lastSeen: u.getString('lastSeen') || '',
       identityKey: u.getString('identityKey') || '',
       prekeyKey: u.getString('prekeyKey') || '',
     };
   } catch (_) {
-    return { id: id, name: 'Someone', phone: '', avatar: '', lastSeen: '', identityKey: '', prekeyKey: '' };
+    return { id: id, name: 'Someone', phone: '', username: '', avatar: '', lastSeen: '', identityKey: '', prekeyKey: '' };
   }
 }
 
@@ -65,6 +66,25 @@ function rateLimited(uid, max, windowMs) {
   return arr.length > max;
 }
 
+/** Resolve a person by handle: an @username or a phone number. Returns the
+ *  user record, or null if not found. */
+function resolvePerson(handle) {
+  const h = String(handle || '').trim();
+  if (!h) return null;
+  const uname = h.replace(/^@/, '').toLowerCase();
+  // Try username first (if it looks like one), then phone.
+  if (/^[a-z0-9_.]{3,30}$/.test(uname)) {
+    try {
+      return $app.findFirstRecordByFilter('users', 'username = {:u}', { u: uname });
+    } catch (_) {}
+  }
+  try {
+    return $app.findFirstRecordByFilter('users', 'phone = {:p}', { p: h });
+  } catch (_) {
+    return null;
+  }
+}
+
 /** True if either user has blocked the other. */
 function blockedPair(aId, bId) {
   try {
@@ -82,24 +102,21 @@ function blockedPair(aId, bId) {
 // People
 // ===========================================================================
 
-/** Find a user by phone number. POST /api/kinly/find-user { phone } */
+/** Find a user by @username or phone. POST /api/kinly/find-user { handle } */
 routerAdd('POST', '/api/kinly/find-user', (e) => {
   if (!e.auth) return e.json(401, { error: 'Please sign in.' });
   if (rateLimited(e.auth.id, 20, 60 * 60 * 1000)) {
     return e.json(429, { error: 'Too many lookups. Please wait a little while and try again.' });
   }
   const info = e.requestInfo();
-  const phone = String((info.body && info.body.phone) || '').trim();
-  if (!phone) return e.json(400, { error: 'A phone number is required.' });
-  try {
-    const u = $app.findFirstRecordByFilter('users', 'phone = {:p}', { p: phone });
-    return e.json(200, { id: u.id, name: u.getString('name') || u.getString('email') });
-  } catch (_) {
-    return e.json(404, { error: 'No one with that phone number has joined Kinly yet.' });
-  }
+  const handle = String((info.body && (info.body.handle || info.body.phone)) || '').trim();
+  if (!handle) return e.json(400, { error: 'Enter a username or phone number.' });
+  const u = resolvePerson(handle);
+  if (!u) return e.json(404, { error: 'No one with that username or number has joined Kinly yet.' });
+  return e.json(200, { id: u.id, name: u.getString('name') || u.getString('email'), username: u.getString('username') || '' });
 });
 
-/** Start (or reuse) a 1:1 chat with a person by phone. POST /api/kinly/direct { phone } */
+/** Start (or reuse) a 1:1 chat by @username or phone. POST /api/kinly/direct { handle } */
 routerAdd('POST', '/api/kinly/direct', (e) => {
   const auth = e.auth;
   if (!auth) return e.json(401, { error: 'Please sign in.' });
@@ -107,16 +124,14 @@ routerAdd('POST', '/api/kinly/direct', (e) => {
     return e.json(429, { error: 'Too many lookups. Please wait a little while and try again.' });
   }
   const info = e.requestInfo();
-  const phone = String((info.body && info.body.phone) || '').trim();
-  if (!phone) return e.json(400, { error: 'A phone number is required.' });
+  const handle = String((info.body && (info.body.handle || info.body.phone)) || '').trim();
+  if (!handle) return e.json(400, { error: 'Enter a username or phone number.' });
 
-  let other;
-  try {
-    other = $app.findFirstRecordByFilter('users', 'phone = {:p}', { p: phone });
-  } catch (_) {
-    return e.json(404, { error: 'No one with that phone number has joined Kinly yet.' });
+  const other = resolvePerson(handle);
+  if (!other) {
+    return e.json(404, { error: 'No one with that username or number has joined Kinly yet.' });
   }
-  if (other.id === auth.id) return e.json(400, { error: 'That is your own number.' });
+  if (other.id === auth.id) return e.json(400, { error: 'That is you!' });
   if (blockedPair(auth.id, other.id)) {
     return e.json(403, { error: 'This conversation is not available. You may have blocked this person, or they blocked you.' });
   }

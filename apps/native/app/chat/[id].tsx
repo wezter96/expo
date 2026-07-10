@@ -33,6 +33,7 @@ import {
   type Read,
 } from '../../src/api/pocketbase';
 import { Avatar } from '../../src/components/Avatar';
+import { decryptRemoteToLocal } from '../../src/e2ee';
 import { useStore } from '../../src/store';
 import { presenceLabel } from '../../src/time';
 import { Message } from '../../src/types';
@@ -537,6 +538,24 @@ export default function Chat() {
   );
 }
 
+/** Resolve a media URL for display. For encrypted messages (mediaKey present)
+ *  it downloads + decrypts the blob to a local file; otherwise passes through. */
+function useDisplayUri(url: string | undefined, mediaKey: string | undefined, ext: string): string | undefined {
+  const [uri, setUri] = useState<string | undefined>(mediaKey ? undefined : url);
+  useEffect(() => {
+    let active = true;
+    if (!url) return setUri(undefined);
+    if (!mediaKey) return setUri(url);
+    decryptRemoteToLocal(url, mediaKey, ext)
+      .then((local) => active && setUri(local))
+      .catch(() => active && setUri(undefined));
+    return () => {
+      active = false;
+    };
+  }, [url, mediaKey, ext]);
+  return uri;
+}
+
 type GroupedReaction = { emoji: string; count: number; mine: boolean };
 
 function groupReactions(list: Reaction[], meId: string | null): GroupedReaction[] {
@@ -585,6 +604,9 @@ function Bubble({
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const mine = message.mine;
   const hasLink = !mine && URL_RE.test(message.text);
+  // For encrypted media, download+decrypt to a local file; else pass through.
+  const photoUri = useDisplayUri(message.kind === 'photo' ? message.imageUrl : undefined, message.mediaKey, 'jpg');
+  const audioUri = useDisplayUri(message.kind === 'voice' ? message.audioUrl : undefined, message.mediaKey, 'm4a');
   return (
     <View
       style={[
@@ -614,18 +636,18 @@ function Bubble({
           <Text style={[styles.sender, senderColor ? { color: senderColor } : null]}>{senderName}</Text>
         ) : null}
 
-        {message.kind === 'photo' && message.imageUrl ? (
+        {message.kind === 'photo' && photoUri ? (
           <Pressable
             accessibilityRole="imagebutton"
             accessibilityLabel="View photo"
-            onPress={() => message.imageUrl && onViewPhoto(message.imageUrl)}
+            onPress={() => onViewPhoto(photoUri)}
           >
-            <Image source={{ uri: message.imageUrl }} style={styles.photo} resizeMode="cover" />
+            <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
           </Pressable>
         ) : null}
 
         {message.kind === 'voice' ? (
-          <VoicePlayer uri={message.audioUrl} mine={mine} duration={message.duration} />
+          <VoicePlayer uri={audioUri} mine={mine} duration={message.duration} />
         ) : null}
 
         {message.text ? (

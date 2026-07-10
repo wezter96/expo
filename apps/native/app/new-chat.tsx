@@ -21,16 +21,16 @@ export default function NewChat() {
   const { refresh } = useStore();
   const { colors, fonts } = useTheme();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const [phone, setPhone] = useState('');
+  const [handle, setHandle] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const start = async () => {
-    if (!phone.trim()) return;
+    if (!handle.trim()) return;
     setError(null);
     setBusy(true);
     try {
-      const conversationId = await startDirectChat(phone.trim());
+      const conversationId = await startDirectChat(handle.trim());
       await refresh();
       router.replace(`/chat/${conversationId}`);
     } catch (e) {
@@ -47,15 +47,16 @@ export default function NewChat() {
           <Ionicons name="person-add" size={44} color={colors.textOnDark} />
         </View>
         <Text style={styles.title}>Add a family member or friend</Text>
-        <Text style={styles.body}>Enter their phone number. They need to have joined Kinly too.</Text>
+        <Text style={styles.body}>Enter their username or phone number. They need to have joined Kinly too.</Text>
 
         <TextInput
           style={styles.input}
-          value={phone}
-          onChangeText={setPhone}
-          placeholder="+1 555 0100"
+          value={handle}
+          onChangeText={setHandle}
+          placeholder="@username or phone"
           placeholderTextColor={colors.textMuted}
-          keyboardType="phone-pad"
+          autoCapitalize="none"
+          autoCorrect={false}
           autoFocus
         />
 
@@ -64,8 +65,8 @@ export default function NewChat() {
         <Pressable
           accessibilityRole="button"
           onPress={start}
-          disabled={busy || !phone.trim()}
-          style={({ pressed }) => [styles.primary, (busy || !phone.trim() || pressed) && styles.dim]}
+          disabled={busy || !handle.trim()}
+          style={({ pressed }) => [styles.primary, (busy || !handle.trim() || pressed) && styles.dim]}
         >
           {busy ? <ActivityIndicator color={colors.textOnDark} /> : <Text style={styles.primaryText}>Start chat</Text>}
         </Pressable>

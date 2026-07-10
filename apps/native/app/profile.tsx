@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { myAvatarUrl, updateProfile } from '../src/api/pocketbase';
+import { currentUsername, myAvatarUrl, updateProfile, updateUsername } from '../src/api/pocketbase';
 import { useAuth } from '../src/auth/AuthContext';
 import { Avatar } from '../src/components/Avatar';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../src/theme';
@@ -28,6 +28,7 @@ export default function Profile() {
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const [name, setName] = useState(user?.name ?? '');
+  const [username, setUsername] = useState(currentUsername());
   const [photo, setPhoto] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,14 +53,21 @@ export default function Profile() {
       setError('Please enter your name.');
       return;
     }
+    const uname = username.trim().toLowerCase().replace(/^@/, '');
+    if (uname && !/^[a-z0-9_.]{3,30}$/.test(uname)) {
+      setError('Username must be 3–30 letters, numbers, dots or underscores.');
+      return;
+    }
     setError(null);
     setBusy(true);
     try {
       await updateProfile(name, photo);
+      if (uname !== currentUsername()) await updateUsername(uname);
       refreshUser();
       router.back();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save your profile.');
+      const msg = e instanceof Error ? e.message : 'Could not save your profile.';
+      setError(/unique|username/i.test(msg) ? 'That username is already taken. Try another.' : msg);
     } finally {
       setBusy(false);
     }
@@ -85,6 +93,18 @@ export default function Profile() {
           placeholderTextColor={colors.textMuted}
           autoCapitalize="words"
         />
+
+        <Text style={styles.label}>Username</Text>
+        <TextInput
+          style={styles.input}
+          value={username}
+          onChangeText={setUsername}
+          placeholder="@username (optional)"
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <Text style={styles.fieldHint}>Family can add you by your username — no phone number needed.</Text>
 
         {user?.phone ? (
           <>
@@ -129,6 +149,7 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     borderColor: colors.background,
   },
   changePhoto: { alignSelf: 'center', fontSize: fonts.small, color: colors.textMuted, marginBottom: spacing.md },
+  fieldHint: { fontSize: fonts.small, color: colors.textMuted, marginTop: 2 },
   label: { fontSize: fonts.body, fontWeight: '800', color: colors.text, marginTop: spacing.sm },
   input: {
     minHeight: TAP_TARGET,

@@ -16,6 +16,8 @@ migrate(
     // --- users: add phone + push token; let people view each other ------
     const users = app.findCollectionByNameOrId('users');
     users.fields.add(new Field({ type: 'text', name: 'phone', max: 40 }));
+    // Public username so people can add you WITHOUT sharing a phone number.
+    users.fields.add(new Field({ type: 'text', name: 'username', max: 30, pattern: '^[a-z0-9_.]{3,30}$' }));
     users.fields.add(new Field({ type: 'text', name: 'pushToken', max: 300 }));
     users.fields.add(new Field({ type: 'date', name: 'lastSeen' }));
     // People this user has blocked (they can't start chats or message each other).
@@ -27,6 +29,7 @@ migrate(
     users.fields.add(new Field({ type: 'text', name: 'identityKey', max: 100 }));
     users.fields.add(new Field({ type: 'text', name: 'prekeyKey', max: 100 }));
     users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
+    users.indexes.push("CREATE UNIQUE INDEX idx_users_username ON users (username) WHERE username != ''");
     // Any signed-in user can view a user record (needed to show names & photos
     // of the people you chat with). You can only change your own record.
     users.viewRule = '@request.auth.id != ""';
@@ -237,7 +240,7 @@ migrate(
     }
     try {
       const users = app.findCollectionByNameOrId('users');
-      for (const f of ['phone', 'pushToken', 'lastSeen', 'blocked', 'identityKey', 'prekeyKey']) {
+      for (const f of ['phone', 'username', 'pushToken', 'lastSeen', 'blocked', 'identityKey', 'prekeyKey']) {
         if (users.fields.getByName(f)) users.fields.removeByName(f);
       }
       app.save(users);

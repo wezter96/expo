@@ -38,6 +38,8 @@ export type Message = {
   authorId?: string;
   /** true if this message was end-to-end encrypted on the server. */
   encrypted?: boolean;
+  /** base64 per-file media key (encrypted messages only) — used to decrypt the file for display. */
+  mediaKey?: string;
   /** epoch millis */
   at: number;
 };

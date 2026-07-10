@@ -174,17 +174,30 @@ export async function fetchKnownPeople(): Promise<KnownPerson[]> {
   }
 }
 
-/** Look up a person by phone number. Throws with a friendly message if not found. */
-export async function findPerson(phone: string): Promise<{ id: string; name: string }> {
+/** Look up a person by @username or phone. Throws with a friendly message if not found. */
+export async function findPerson(handle: string): Promise<{ id: string; name: string; username?: string }> {
   if (!pb) throw new Error('Not connected to a server.');
-  return pb.send('/api/kinly/find-user', { method: 'POST', body: { phone } });
+  return pb.send('/api/kinly/find-user', { method: 'POST', body: { handle } });
 }
 
-/** Start (or reuse) a 1:1 chat with a person by phone. Returns the conversation id. */
-export async function startDirectChat(phone: string): Promise<string> {
+/** Start (or reuse) a 1:1 chat by @username or phone. Returns the conversation id. */
+export async function startDirectChat(handle: string): Promise<string> {
   if (!pb) throw new Error('Not connected to a server.');
-  const res = await pb.send<{ id: string }>('/api/kinly/direct', { method: 'POST', body: { phone } });
+  const res = await pb.send<{ id: string }>('/api/kinly/direct', { method: 'POST', body: { handle } });
   return res.id;
+}
+
+/** Set (or change) the signed-in user's public username. Lowercased; 3–30 chars. */
+export async function updateUsername(username: string): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  const clean = username.trim().toLowerCase().replace(/^@/, '');
+  await pb.collection('users').update(pb.authStore.record.id, { username: clean });
+  await pb.collection('users').authRefresh();
+}
+
+/** The signed-in user's username, if set. */
+export function currentUsername(): string {
+  return (pb?.authStore.record?.username as string) ?? '';
 }
 
 /** Create a group conversation. Returns the conversation id. */
@@ -281,15 +294,17 @@ async function ensureConvKey(conversationId: string): Promise<Uint8Array | null>
   }
 }
 
-/** Decrypt an encrypted message record's text (best-effort; never throws). */
-async function decryptText(r: RecordModel): Promise<string> {
-  if (!r.enc) return (r.text as string) ?? '';
+/** Decrypt an encrypted message record (best-effort; never throws). Returns the
+ *  plaintext text and, for media, the per-file key used to decrypt the blob. */
+async function decryptMessage(r: RecordModel): Promise<{ text: string; mediaKey?: string }> {
+  if (!r.enc) return { text: (r.text as string) ?? '' };
   try {
     const key = await getConvKey(r.conversation as string);
-    if (!key) return '🔒 Encrypted — unlock on your other device';
-    return e2ee.openPayload(key, r.cipher as string).t;
+    if (!key) return { text: '🔒 Encrypted — unlock on your other device' };
+    const p = e2ee.openPayload(key, r.cipher as string);
+    return { text: p.t, mediaKey: p.m?.key };
   } catch {
-    return '🔒 Could not decrypt this message';
+    return { text: '🔒 Could not decrypt this message' };
   }
 }
 
@@ -306,7 +321,11 @@ export async function fetchMessages(contactId: string): Promise<Message[] | null
     const out: Message[] = [];
     for (const r of rows) {
       const m = toMessage(r, meId);
-      if (r.enc) m.text = await decryptText(r);
+      if (r.enc) {
+        const d = await decryptMessage(r);
+        m.text = d.text;
+        m.mediaKey = d.mediaKey;
+      }
       out.push(m);
     }
     return out;
@@ -349,35 +368,67 @@ function fileField(uri: string, field: string, fallbackName: string, mime: strin
   return form;
 }
 
-/** Send a photo message. Returns true on success. */
+/** Send a photo message. Encrypted (file + caption) when the conversation has
+ *  E2EE keys; plaintext otherwise. Returns true on success. */
 export async function pushPhoto(id: string, contactId: string, uri: string, caption = ''): Promise<boolean> {
   if (!pb || !pb.authStore.record) return false;
   try {
-    const form = fileField(uri, 'image', 'photo.jpg', 'image/jpeg');
-    form.append('id', id);
-    form.append('conversation', contactId);
-    form.append('author', pb.authStore.record.id);
-    form.append('kind', 'photo');
-    form.append('text', caption.trim());
-    await pb.collection('messages').create(form);
+    const author = pb.authStore.record.id;
+    const key = await ensureConvKey(contactId);
+    if (key) {
+      const { encUri, keyB64 } = await e2ee.encryptFileToTemp(uri);
+      const form = fileField(encUri, 'image', 'photo.enc', 'application/octet-stream');
+      form.append('id', id);
+      form.append('conversation', contactId);
+      form.append('author', author);
+      form.append('kind', 'photo');
+      form.append('enc', 'true');
+      form.append('text', '');
+      form.append('cipher', e2ee.sealPayload(key, { t: caption.trim(), m: { key: keyB64, kind: 'photo' } }));
+      await pb.collection('messages').create(form);
+    } else {
+      const form = fileField(uri, 'image', 'photo.jpg', 'image/jpeg');
+      form.append('id', id);
+      form.append('conversation', contactId);
+      form.append('author', author);
+      form.append('kind', 'photo');
+      form.append('text', caption.trim());
+      await pb.collection('messages').create(form);
+    }
     return true;
   } catch {
     return false;
   }
 }
 
-/** Send a voice message. Returns true on success. */
+/** Send a voice message. Encrypted when the conversation has E2EE keys. */
 export async function pushVoice(id: string, contactId: string, uri: string, duration: number): Promise<boolean> {
   if (!pb || !pb.authStore.record) return false;
   try {
-    const form = fileField(uri, 'audio', 'voice.m4a', 'audio/m4a');
-    form.append('id', id);
-    form.append('conversation', contactId);
-    form.append('author', pb.authStore.record.id);
-    form.append('kind', 'voice');
-    form.append('text', '');
-    form.append('duration', String(Math.round(duration)));
-    await pb.collection('messages').create(form);
+    const author = pb.authStore.record.id;
+    const key = await ensureConvKey(contactId);
+    if (key) {
+      const { encUri, keyB64 } = await e2ee.encryptFileToTemp(uri);
+      const form = fileField(encUri, 'audio', 'voice.enc', 'application/octet-stream');
+      form.append('id', id);
+      form.append('conversation', contactId);
+      form.append('author', author);
+      form.append('kind', 'voice');
+      form.append('enc', 'true');
+      form.append('text', '');
+      form.append('duration', String(Math.round(duration)));
+      form.append('cipher', e2ee.sealPayload(key, { t: '', m: { key: keyB64, kind: 'voice', duration: Math.round(duration) } }));
+      await pb.collection('messages').create(form);
+    } else {
+      const form = fileField(uri, 'audio', 'voice.m4a', 'audio/m4a');
+      form.append('id', id);
+      form.append('conversation', contactId);
+      form.append('author', author);
+      form.append('kind', 'voice');
+      form.append('text', '');
+      form.append('duration', String(Math.round(duration)));
+      await pb.collection('messages').create(form);
+    }
     return true;
   } catch {
     return false;
@@ -472,7 +523,7 @@ export async function subscribeMessages(
       if (e.action === 'create' || e.action === 'update') {
         const rec = e.record;
         if (rec.enc) {
-          decryptText(rec).then((t) => onChange({ ...toMessage(rec, meId), text: t }));
+          decryptMessage(rec).then((d) => onChange({ ...toMessage(rec, meId), text: d.text, mediaKey: d.mediaKey }));
         } else {
           onChange(toMessage(rec, meId));
         }

@@ -14,6 +14,7 @@ import { AppLockProvider, LockOverlay } from '../src/applock';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
 import { AuthScreen } from '../src/auth/AuthScreen';
 import { IncomingCallOverlay } from '../src/calls/IncomingCallOverlay';
+import { WebNotice } from '../src/components/WebNotice';
 import { applyGlobalFont } from '../src/global-font';
 import { StoreProvider } from '../src/store';
 import { ThemeProvider, useTheme } from '../src/theme-context';
@@ -101,6 +102,7 @@ export default function RootLayout() {
             <AuthProvider>
               <StoreProvider>
                 <ThemedStatusBar />
+                <WebNotice />
                 <Gate />
                 <LockOverlay />
               </StoreProvider>

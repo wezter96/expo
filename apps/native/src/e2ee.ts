@@ -19,6 +19,7 @@ import { decodePayload, encodePayload, type MessagePayload } from './crypto/mess
 import { aeadDecrypt, aeadEncrypt, fromB64, toB64 } from './crypto/primitives';
 
 export { e2eeSupported };
+export { decryptRemoteToLocal, encryptFileToTemp } from './crypto/media-io';
 export type { MessagePayload };
 
 /** Public keys to publish to the server (null on web / unsupported). */
