@@ -2,30 +2,38 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { type LangPref, useTranslation } from '../src/i18n';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../src/theme';
 import { type ThemeMode, useTheme } from '../src/theme-context';
 import { type TextSize } from '../src/theme';
 
-const SIZES: { key: TextSize; label: string }[] = [
-  { key: 'normal', label: 'Normal' },
-  { key: 'large', label: 'Large' },
-  { key: 'xlarge', label: 'Extra large' },
+const SIZES: { key: TextSize; labelKey: string }[] = [
+  { key: 'normal', labelKey: 'display.normal' },
+  { key: 'large', labelKey: 'display.large' },
+  { key: 'xlarge', labelKey: 'display.xlarge' },
 ];
 
-const MODES: { key: ThemeMode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'light', label: 'Light', icon: 'sunny' },
-  { key: 'dark', label: 'Dark', icon: 'moon' },
-  { key: 'auto', label: 'Automatic', icon: 'contrast' },
+const MODES: { key: ThemeMode; labelKey: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'light', labelKey: 'display.light', icon: 'sunny' },
+  { key: 'dark', labelKey: 'display.dark', icon: 'moon' },
+  { key: 'auto', labelKey: 'display.auto', icon: 'contrast' },
+];
+
+const LANGS: { key: LangPref; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'system', label: 'display.langSystem', icon: 'phone-portrait' },
+  { key: 'en', label: 'English', icon: 'globe' },
+  { key: 'sv', label: 'Svenska', icon: 'globe' },
 ];
 
 export default function Display() {
   const insets = useSafeAreaInsets();
   const { colors, fonts, mode, setMode, textSize, setTextSize } = useTheme();
+  const { t, pref, setPref } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   return (
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
-      <Text style={styles.label}>Text size</Text>
+      <Text style={styles.label}>{t('display.textSize')}</Text>
       <View style={styles.card}>
         {SIZES.map((s, i) => (
           <Pressable
@@ -36,7 +44,7 @@ export default function Display() {
             style={[styles.row, i > 0 && styles.divider]}
           >
             <Text style={[styles.rowLabel, s.key === 'large' && styles.big, s.key === 'xlarge' && styles.bigger]}>
-              {s.label}
+              {t(s.labelKey)}
             </Text>
             <Ionicons
               name={textSize === s.key ? 'radio-button-on' : 'radio-button-off'}
@@ -47,7 +55,7 @@ export default function Display() {
         ))}
       </View>
 
-      <Text style={styles.label}>Appearance</Text>
+      <Text style={styles.label}>{t('display.appearance')}</Text>
       <View style={styles.card}>
         {MODES.map((m, i) => (
           <Pressable
@@ -58,7 +66,7 @@ export default function Display() {
             style={[styles.row, i > 0 && styles.divider]}
           >
             <Ionicons name={m.icon} size={26} color={colors.primary} />
-            <Text style={styles.rowLabel}>{m.label}</Text>
+            <Text style={styles.rowLabel}>{t(m.labelKey)}</Text>
             <Ionicons
               name={mode === m.key ? 'radio-button-on' : 'radio-button-off'}
               size={30}
@@ -68,7 +76,26 @@ export default function Display() {
         ))}
       </View>
 
-      <Text style={styles.hint}>Kinly also follows your phone&apos;s text size setting.</Text>
+      <Text style={styles.label}>{t('display.language')}</Text>
+      <View style={styles.card}>
+        {LANGS.map((l, i) => (
+          <Pressable
+            key={l.key}
+            accessibilityRole="button"
+            accessibilityState={{ selected: pref === l.key }}
+            onPress={() => setPref(l.key)}
+            style={[styles.row, i > 0 && styles.divider]}
+          >
+            <Ionicons name={l.icon} size={26} color={colors.primary} />
+            <Text style={styles.rowLabel}>{l.key === 'system' ? t(l.label) : l.label}</Text>
+            <Ionicons
+              name={pref === l.key ? 'radio-button-on' : 'radio-button-off'}
+              size={30}
+              color={pref === l.key ? colors.primary : colors.border}
+            />
+          </Pressable>
+        ))}
+      </View>
     </ScrollView>
   );
 }

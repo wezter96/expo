@@ -3,23 +3,25 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from '../i18n';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../theme';
 import { useTheme } from '../theme-context';
 
 const KEY = 'kinly.onboarded.v1';
 
-type Slide = { icon: keyof typeof Ionicons.glyphMap; title: string; body: string };
+type Slide = { icon: keyof typeof Ionicons.glyphMap; key: string };
 const SLIDES: Slide[] = [
-  { icon: 'chatbubbles', title: 'Welcome to Kinly', body: 'A simple, private way to stay close to your family and friends.' },
-  { icon: 'text', title: 'Big and easy to read', body: 'Everything is large and clear. You can make the text even bigger in Settings → Display.' },
-  { icon: 'sparkles', title: 'Just ask', body: 'Tap the ✨ Assistant button and say what you want — like "Call Mary" or "Tell Tom I\'ll be late".' },
-  { icon: 'lock-closed', title: 'Private by default', body: 'Your messages are end-to-end encrypted. Only you and your family can read them — not even we can.' },
+  { icon: 'chatbubbles', key: 'welcome' },
+  { icon: 'text', key: 'readable' },
+  { icon: 'sparkles', key: 'assistant' },
+  { icon: 'lock-closed', key: 'private' },
 ];
 
 /** First-run welcome flow. Renders nothing once the user has finished it. */
 export function Onboarding() {
   const insets = useSafeAreaInsets();
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [done, setDone] = useState<boolean | null>(null);
   const [page, setPage] = useState(0);
@@ -53,7 +55,7 @@ export function Onboarding() {
   return (
     <View style={[styles.cover, { paddingTop: insets.top, paddingBottom: insets.bottom + spacing.lg }]}>
       <Pressable accessibilityRole="button" onPress={finish} style={styles.skip} hitSlop={10}>
-        <Text style={styles.skipText}>Skip</Text>
+        <Text style={styles.skipText}>{t('common.skip')}</Text>
       </Pressable>
 
       <ScrollView
@@ -65,24 +67,24 @@ export function Onboarding() {
         style={styles.flex}
       >
         {SLIDES.map((s) => (
-          <View key={s.title} style={[styles.slide, { width }]}>
+          <View key={s.key} style={[styles.slide, { width }]}>
             <View style={styles.iconCircle}>
               <Ionicons name={s.icon} size={72} color={colors.textOnDark} />
             </View>
-            <Text style={styles.title}>{s.title}</Text>
-            <Text style={styles.body}>{s.body}</Text>
+            <Text style={styles.title}>{t(`onboarding.${s.key}.title`)}</Text>
+            <Text style={styles.body}>{t(`onboarding.${s.key}.body`)}</Text>
           </View>
         ))}
       </ScrollView>
 
       <View style={styles.dots}>
         {SLIDES.map((s, i) => (
-          <View key={s.title} style={[styles.dot, i === page && styles.dotActive]} />
+          <View key={s.key} style={[styles.dot, i === page && styles.dotActive]} />
         ))}
       </View>
 
       <Pressable accessibilityRole="button" onPress={next} style={({ pressed }) => [styles.button, pressed && styles.dim]}>
-        <Text style={styles.buttonText}>{page >= SLIDES.length - 1 ? 'Get started' : 'Next'}</Text>
+        <Text style={styles.buttonText}>{page >= SLIDES.length - 1 ? t('common.getStarted') : t('common.next')}</Text>
         <Ionicons name="arrow-forward" size={24} color={colors.textOnDark} />
       </Pressable>
     </View>

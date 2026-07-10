@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { requestPasswordReset } from '../api/pocketbase';
+import { useTranslation } from '../i18n';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../theme';
 import { useTheme } from '../theme-context';
 import { useAuth } from './AuthContext';
@@ -24,6 +25,7 @@ export function AuthScreen() {
   const insets = useSafeAreaInsets();
   const { signIn, signUp } = useAuth();
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [mode, setMode] = useState<Mode>('signin');
   const [name, setName] = useState('');
@@ -76,26 +78,26 @@ export function AuthScreen() {
         <View style={styles.logo}>
           <Ionicons name="chatbubbles" size={48} color={colors.textOnDark} />
         </View>
-        <Text style={styles.title}>Welcome to Kinly</Text>
+        <Text style={styles.title}>{t('auth.welcome')}</Text>
         <Text style={styles.subtitle}>
-          {mode === 'signin' ? 'Sign in to talk with your family.' : 'Create your account to get started.'}
+          {mode === 'signin' ? t('auth.signinSub') : t('auth.signupSub')}
         </Text>
 
         {mode === 'signup' && (
           <>
-            <Field label="Your name" value={name} onChangeText={setName} placeholder="Mary Johnson" autoCapitalize="words" />
+            <Field label={t('auth.name')} value={name} onChangeText={setName} placeholder="Mary Johnson" autoCapitalize="words" />
             <Field
-              label="Phone number"
+              label={t('auth.phone')}
               value={phone}
               onChangeText={setPhone}
               placeholder="+1 555 0100"
               keyboardType="phone-pad"
-              hint="Family add you by your phone number."
+              hint={t('auth.phoneHint')}
             />
           </>
         )}
         <Field
-          label="Email"
+          label={t('auth.email')}
           value={email}
           onChangeText={setEmail}
           placeholder="you@example.com"
@@ -103,10 +105,10 @@ export function AuthScreen() {
           autoCapitalize="none"
         />
         <Field
-          label="Password"
+          label={t('auth.password')}
           value={password}
           onChangeText={setPassword}
-          placeholder="At least 8 characters"
+          placeholder={t('auth.passwordHint')}
           secureTextEntry
           autoCapitalize="none"
         />
@@ -122,13 +124,13 @@ export function AuthScreen() {
           {busy ? (
             <ActivityIndicator color={colors.textOnDark} />
           ) : (
-            <Text style={styles.primaryText}>{mode === 'signin' ? 'Sign in' : 'Create account'}</Text>
+            <Text style={styles.primaryText}>{mode === 'signin' ? t('auth.signin') : t('auth.createAccount')}</Text>
           )}
         </Pressable>
 
         {mode === 'signin' ? (
           <Pressable accessibilityRole="button" onPress={forgot} style={styles.switch}>
-            <Text style={styles.switchText}>Forgot password?</Text>
+            <Text style={styles.switchText}>{t('auth.forgot')}</Text>
           </Pressable>
         ) : null}
 
@@ -141,7 +143,7 @@ export function AuthScreen() {
           style={styles.switch}
         >
           <Text style={styles.switchText}>
-            {mode === 'signin' ? "New here? Create an account" : 'Already have an account? Sign in'}
+            {mode === 'signin' ? t('auth.toSignup') : t('auth.toSignin')}
           </Text>
         </Pressable>
       </ScrollView>

@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from '../i18n';
 import { useStore } from '../store';
 import { type Colors, type Fonts, spacing, UNREAD_BADGE } from '../theme';
 import { useTheme } from '../theme-context';
@@ -21,10 +22,10 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   settings: 'settings-sharp',
 };
 
-const LABELS: Record<string, string> = {
-  index: 'Messages',
-  assistant: 'Assistant',
-  settings: 'Settings',
+const LABEL_KEYS: Record<string, string> = {
+  index: 'tabs.messages',
+  assistant: 'tabs.assistant',
+  settings: 'tabs.settings',
 };
 
 // SDK 57's expo-router vendors react-navigation, so we take the tab-bar prop
@@ -35,6 +36,8 @@ export function KinlyTabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const { totalUnread } = useStore();
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
+  const label = (name: string) => t(LABEL_KEYS[name] ?? name);
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   return (
@@ -54,13 +57,13 @@ export function KinlyTabBar({ state, navigation }: TabBarProps) {
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{ selected: focused }}
-                accessibilityLabel={LABELS[route.name]}
+                accessibilityLabel={label(route.name)}
                 onPress={onPress}
                 style={({ pressed }) => [styles.centerButton, pressed && styles.centerPressed]}
               >
                 <Ionicons name="sparkles" size={38} color={colors.textOnDark} />
               </Pressable>
-              <Text style={styles.centerLabel}>Assistant</Text>
+              <Text style={styles.centerLabel}>{label('assistant')}</Text>
             </View>
           );
         }
@@ -71,7 +74,7 @@ export function KinlyTabBar({ state, navigation }: TabBarProps) {
             key={route.key}
             accessibilityRole="button"
             accessibilityState={{ selected: focused }}
-            accessibilityLabel={LABELS[route.name]}
+            accessibilityLabel={label(route.name)}
             onPress={onPress}
             style={styles.sideTab}
           >
@@ -83,7 +86,7 @@ export function KinlyTabBar({ state, navigation }: TabBarProps) {
                 </View>
               ) : null}
             </View>
-            <Text style={[styles.sideLabel, { color: tint }]}>{LABELS[route.name]}</Text>
+            <Text style={[styles.sideLabel, { color: tint }]}>{label(route.name)}</Text>
           </Pressable>
         );
       })}

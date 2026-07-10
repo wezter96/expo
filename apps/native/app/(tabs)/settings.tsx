@@ -8,6 +8,7 @@ import { Avatar } from '../../src/components/Avatar';
 import { myAvatarUrl, serverEnabled } from '../../src/api/pocketbase';
 import { useAppLock } from '../../src/applock';
 import { useAuth } from '../../src/auth/AuthContext';
+import { useTranslation } from '../../src/i18n';
 import { useStore } from '../../src/store';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
@@ -27,45 +28,46 @@ export default function Settings() {
   const { emergencyId, getContact } = useStore();
   const { available: lockAvailable, enabled: lockEnabled, setEnabled: setLockEnabled } = useAppLock();
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const online = serverEnabled();
   const version = Constants.expoConfig?.version ?? '1.0.0';
   const emergencyName = emergencyId ? getContact(emergencyId)?.name : undefined;
 
   const confirmSignOut = () =>
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: signOut },
+    Alert.alert(t('settings.signOut'), t('settings.signOutConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('settings.signOut'), style: 'destructive', onPress: signOut },
     ]);
 
   const rows: Row[] = [
     {
       icon: online ? 'cloud-done' : 'cloud-offline',
-      label: 'Connection',
-      value: online ? 'Connected' : 'On this device',
+      label: t('settings.connection'),
+      value: online ? t('settings.connected') : t('settings.onThisDevice'),
       color: online ? colors.accent : colors.textMuted,
     },
     {
       icon: 'volume-high',
-      label: 'Read messages aloud',
-      value: 'On — tap the speaker on any message',
+      label: t('settings.readAloud'),
+      value: t('settings.readAloudValue'),
       onPress: () =>
         Alert.alert('Read aloud', 'Tap the speaker icon on any received message to hear it read out loud.'),
     },
     {
       icon: 'contrast',
-      label: 'Display',
-      value: 'Text size & dark mode',
+      label: t('settings.display'),
+      value: t('settings.displayValue'),
       onPress: () => router.push('/display'),
     },
     {
       icon: lockEnabled ? 'lock-closed' : 'lock-open',
-      label: 'App lock',
+      label: t('settings.appLock'),
       value: !lockAvailable
-        ? 'Not available on this device'
+        ? t('settings.appLockUnavailable')
         : lockEnabled
-          ? 'On — Face ID / fingerprint / passcode'
-          : 'Off — tap to require unlock',
+          ? t('settings.appLockOn')
+          : t('settings.appLockOff'),
       color: lockEnabled ? colors.accent : colors.primary,
       onPress: lockAvailable
         ? () => {
@@ -75,28 +77,28 @@ export default function Settings() {
     },
     {
       icon: 'shield-checkmark',
-      label: 'Encryption',
-      value: 'Recovery phrase & keys',
+      label: t('settings.encryption'),
+      value: t('settings.encryptionValue'),
       color: colors.accent,
       onPress: () => router.push('/encryption'),
     },
     {
       icon: 'alert-circle',
-      label: 'Emergency contact',
-      value: emergencyName ?? 'Not set — tap to choose',
+      label: t('settings.emergency'),
+      value: emergencyName ?? t('settings.emergencyNotSet'),
       color: colors.danger,
       onPress: () => router.push('/emergency'),
     },
     {
       icon: 'heart',
-      label: 'Daily check-in',
-      value: 'Let your family know you’re OK',
+      label: t('settings.checkin'),
+      value: t('settings.checkinValue'),
       color: colors.accent,
       onPress: () => router.push('/checkin'),
     },
     {
       icon: 'help-circle',
-      label: 'Help',
+      label: t('settings.help'),
       onPress: () =>
         Alert.alert(
           'How to use Kinly',
@@ -105,8 +107,8 @@ export default function Settings() {
     },
     {
       icon: 'information-circle',
-      label: 'About Kinly',
-      value: `Version ${version}`,
+      label: t('settings.about'),
+      value: t('settings.version', { version }),
       onPress: () => Alert.alert('About Kinly', 'A simple, friendly way to stay in touch with family and friends. ❤️'),
     },
   ];
@@ -120,13 +122,13 @@ export default function Settings() {
         disabled={!user}
         style={({ pressed }) => [styles.profile, pressed && user && styles.pressed]}
       >
-        <Avatar name={user?.name || 'You'} size={84} uri={user ? myAvatarUrl() : undefined} />
-        <Text style={styles.profileName}>{user?.name || 'You'}</Text>
-        <Text style={styles.profileSub}>{user?.phone || user?.email || 'Kinly member'}</Text>
+        <Avatar name={user?.name || t('settings.you')} size={84} uri={user ? myAvatarUrl() : undefined} />
+        <Text style={styles.profileName}>{user?.name || t('settings.you')}</Text>
+        <Text style={styles.profileSub}>{user?.phone || user?.email || t('settings.member')}</Text>
         {user ? (
           <View style={styles.editPill}>
             <Ionicons name="pencil" size={16} color={colors.primary} />
-            <Text style={styles.editText}>Edit profile</Text>
+            <Text style={styles.editText}>{t('settings.editProfile')}</Text>
           </View>
         ) : null}
       </Pressable>
@@ -163,7 +165,7 @@ export default function Settings() {
           style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}
         >
           <Ionicons name="log-out-outline" size={28} color={colors.danger} />
-          <Text style={styles.signOutText}>Sign out</Text>
+          <Text style={styles.signOutText}>{t('settings.signOut')}</Text>
         </Pressable>
       ) : null}
     </ScrollView>

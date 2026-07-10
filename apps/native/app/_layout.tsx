@@ -16,6 +16,7 @@ import { AuthScreen } from '../src/auth/AuthScreen';
 import { IncomingCallOverlay } from '../src/calls/IncomingCallOverlay';
 import { WebNotice } from '../src/components/WebNotice';
 import { applyGlobalFont } from '../src/global-font';
+import { I18nProvider } from '../src/i18n';
 import { Onboarding } from '../src/onboarding/Onboarding';
 import { StoreProvider } from '../src/store';
 import { ThemeProvider, useTheme } from '../src/theme-context';
@@ -101,6 +102,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        <I18nProvider>
         <ThemeProvider>
           <AppLockProvider>
             <AuthProvider>
@@ -114,6 +116,7 @@ export default function RootLayout() {
             </AuthProvider>
           </AppLockProvider>
         </ThemeProvider>
+        </I18nProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

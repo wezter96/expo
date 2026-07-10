@@ -1,0 +1,246 @@
+/**
+ * Lightweight i18n. Dependency-free catalogs + a `t()` helper with {var}
+ * interpolation. The effective language is the user's choice, or the phone's
+ * language when set to "system" (Swedish phones get Swedish automatically).
+ *
+ * Coverage is being migrated incrementally; any missing key falls back to
+ * English, then to the key itself, so the app never shows a blank.
+ */
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getLocales } from 'expo-localization';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+export type Lang = 'en' | 'sv';
+export type LangPref = 'system' | Lang;
+
+const en: Record<string, string> = {
+  'common.cancel': 'Cancel',
+  'common.done': 'Done',
+  'common.save': 'Save',
+  'common.next': 'Next',
+  'common.skip': 'Skip',
+  'common.getStarted': 'Get started',
+  'common.loading': 'Loading…',
+
+  'tabs.messages': 'Messages',
+  'tabs.assistant': 'Assistant',
+  'tabs.settings': 'Settings',
+
+  'onboarding.welcome.title': 'Welcome to Kinly',
+  'onboarding.welcome.body': 'A simple, private way to stay close to your family and friends.',
+  'onboarding.readable.title': 'Big and easy to read',
+  'onboarding.readable.body': 'Everything is large and clear. You can make the text even bigger in Settings → Display.',
+  'onboarding.assistant.title': 'Just ask',
+  'onboarding.assistant.body': 'Tap the ✨ Assistant button and say what you want — like "Call Mary" or "Tell Tom I\'ll be late".',
+  'onboarding.private.title': 'Private by default',
+  'onboarding.private.body': 'Your messages are end-to-end encrypted. Only you and your family can read them — not even we can.',
+
+  'auth.welcome': 'Welcome to Kinly',
+  'auth.signinSub': 'Sign in to talk with your family.',
+  'auth.signupSub': 'Create your account to get started.',
+  'auth.name': 'Your name',
+  'auth.phone': 'Phone number',
+  'auth.phoneHint': 'Family add you by your phone number.',
+  'auth.email': 'Email',
+  'auth.password': 'Password',
+  'auth.passwordHint': 'At least 8 characters',
+  'auth.signin': 'Sign in',
+  'auth.createAccount': 'Create account',
+  'auth.forgot': 'Forgot password?',
+  'auth.toSignup': 'New here? Create an account',
+  'auth.toSignin': 'Already have an account? Sign in',
+
+  'messages.search': 'Search messages and people',
+  'messages.noChats': 'No chats yet',
+  'messages.noChatsBody': 'Add a family member or friend by their phone number to start talking.',
+  'messages.addPerson': 'Add a person',
+  'messages.newGroup': 'New group',
+  'messages.getHelp': 'Get help — call {name}',
+  'messages.people': 'People',
+  'messages.messages': 'Messages',
+  'messages.noMatches': 'No matches. Try a different word.',
+
+  'settings.member': 'Kinly member',
+  'settings.you': 'You',
+  'settings.editProfile': 'Edit profile',
+  'settings.connection': 'Connection',
+  'settings.connected': 'Connected',
+  'settings.onThisDevice': 'On this device',
+  'settings.readAloud': 'Read messages aloud',
+  'settings.readAloudValue': 'On — tap the speaker on any message',
+  'settings.display': 'Display',
+  'settings.displayValue': 'Text size & dark mode',
+  'settings.appLock': 'App lock',
+  'settings.appLockUnavailable': 'Not available on this device',
+  'settings.appLockOn': 'On — Face ID / fingerprint / passcode',
+  'settings.appLockOff': 'Off — tap to require unlock',
+  'settings.encryption': 'Encryption',
+  'settings.encryptionValue': 'Recovery phrase & keys',
+  'settings.emergency': 'Emergency contact',
+  'settings.emergencyNotSet': 'Not set — tap to choose',
+  'settings.checkin': 'Daily check-in',
+  'settings.checkinValue': 'Let your family know you’re OK',
+  'settings.language': 'Language',
+  'settings.help': 'Help',
+  'settings.about': 'About Kinly',
+  'settings.version': 'Version {version}',
+  'settings.signOut': 'Sign out',
+  'settings.signOutConfirm': 'Are you sure you want to sign out?',
+
+  'chat.writeMessage': 'Write a message…',
+
+  'display.textSize': 'Text size',
+  'display.appearance': 'Appearance',
+  'display.language': 'Language',
+  'display.normal': 'Normal',
+  'display.large': 'Large',
+  'display.xlarge': 'Extra large',
+  'display.light': 'Light',
+  'display.dark': 'Dark',
+  'display.auto': 'Automatic',
+  'display.langSystem': 'Phone language',
+};
+
+const sv: Record<string, string> = {
+  'common.cancel': 'Avbryt',
+  'common.done': 'Klar',
+  'common.save': 'Spara',
+  'common.next': 'Nästa',
+  'common.skip': 'Hoppa över',
+  'common.getStarted': 'Kom igång',
+  'common.loading': 'Laddar…',
+
+  'tabs.messages': 'Meddelanden',
+  'tabs.assistant': 'Assistent',
+  'tabs.settings': 'Inställningar',
+
+  'onboarding.welcome.title': 'Välkommen till Kinly',
+  'onboarding.welcome.body': 'Ett enkelt och privat sätt att hålla kontakten med familj och vänner.',
+  'onboarding.readable.title': 'Stort och lättläst',
+  'onboarding.readable.body': 'Allt är stort och tydligt. Du kan göra texten ännu större under Inställningar → Skärm.',
+  'onboarding.assistant.title': 'Fråga bara',
+  'onboarding.assistant.body':
+    'Tryck på ✨ Assistent-knappen och säg vad du vill — som "Ring Maria" eller "Säg till Tom att jag blir sen".',
+  'onboarding.private.title': 'Privat som standard',
+  'onboarding.private.body':
+    'Dina meddelanden är totalsträckskrypterade. Bara du och din familj kan läsa dem — inte ens vi.',
+
+  'auth.welcome': 'Välkommen till Kinly',
+  'auth.signinSub': 'Logga in för att prata med din familj.',
+  'auth.signupSub': 'Skapa ett konto för att komma igång.',
+  'auth.name': 'Ditt namn',
+  'auth.phone': 'Telefonnummer',
+  'auth.phoneHint': 'Familjen lägger till dig med ditt telefonnummer.',
+  'auth.email': 'E-post',
+  'auth.password': 'Lösenord',
+  'auth.passwordHint': 'Minst 8 tecken',
+  'auth.signin': 'Logga in',
+  'auth.createAccount': 'Skapa konto',
+  'auth.forgot': 'Glömt lösenordet?',
+  'auth.toSignup': 'Ny här? Skapa ett konto',
+  'auth.toSignin': 'Har du redan ett konto? Logga in',
+
+  'messages.search': 'Sök meddelanden och personer',
+  'messages.noChats': 'Inga chattar än',
+  'messages.noChatsBody': 'Lägg till en familjemedlem eller vän med deras telefonnummer för att börja prata.',
+  'messages.addPerson': 'Lägg till en person',
+  'messages.newGroup': 'Ny grupp',
+  'messages.getHelp': 'Få hjälp — ring {name}',
+  'messages.people': 'Personer',
+  'messages.messages': 'Meddelanden',
+  'messages.noMatches': 'Inga träffar. Prova ett annat ord.',
+
+  'settings.member': 'Kinly-medlem',
+  'settings.you': 'Du',
+  'settings.editProfile': 'Redigera profil',
+  'settings.connection': 'Anslutning',
+  'settings.connected': 'Ansluten',
+  'settings.onThisDevice': 'På den här enheten',
+  'settings.readAloud': 'Läs upp meddelanden',
+  'settings.readAloudValue': 'På — tryck på högtalaren på valfritt meddelande',
+  'settings.display': 'Skärm',
+  'settings.displayValue': 'Textstorlek och mörkt läge',
+  'settings.appLock': 'Applås',
+  'settings.appLockUnavailable': 'Inte tillgängligt på den här enheten',
+  'settings.appLockOn': 'På — Face ID / fingeravtryck / lösenkod',
+  'settings.appLockOff': 'Av — tryck för att kräva upplåsning',
+  'settings.encryption': 'Kryptering',
+  'settings.encryptionValue': 'Återställningsfras och nycklar',
+  'settings.emergency': 'Nödkontakt',
+  'settings.emergencyNotSet': 'Inte inställd — tryck för att välja',
+  'settings.checkin': 'Daglig incheckning',
+  'settings.checkinValue': 'Låt din familj veta att du mår bra',
+  'settings.language': 'Språk',
+  'settings.help': 'Hjälp',
+  'settings.about': 'Om Kinly',
+  'settings.version': 'Version {version}',
+  'settings.signOut': 'Logga ut',
+  'settings.signOutConfirm': 'Är du säker på att du vill logga ut?',
+
+  'chat.writeMessage': 'Skriv ett meddelande…',
+
+  'display.textSize': 'Textstorlek',
+  'display.appearance': 'Utseende',
+  'display.language': 'Språk',
+  'display.normal': 'Normal',
+  'display.large': 'Stor',
+  'display.xlarge': 'Extra stor',
+  'display.light': 'Ljust',
+  'display.dark': 'Mörkt',
+  'display.auto': 'Automatiskt',
+  'display.langSystem': 'Telefonens språk',
+};
+
+const CATALOGS: Record<Lang, Record<string, string>> = { en, sv };
+const KEY = 'kinly.locale.v1';
+
+function deviceLang(): Lang {
+  try {
+    const code = getLocales()[0]?.languageCode?.toLowerCase();
+    return code === 'sv' ? 'sv' : 'en';
+  } catch {
+    return 'en';
+  }
+}
+
+export type TFn = (key: string, vars?: Record<string, string | number>) => string;
+
+type I18nValue = { t: TFn; lang: Lang; pref: LangPref; setPref: (p: LangPref) => void };
+const I18nContext = createContext<I18nValue | null>(null);
+
+export function I18nProvider({ children }: { children: React.ReactNode }) {
+  const [pref, setPrefState] = useState<LangPref>('system');
+
+  useEffect(() => {
+    AsyncStorage.getItem(KEY)
+      .then((v) => {
+        if (v === 'en' || v === 'sv' || v === 'system') setPrefState(v);
+      })
+      .catch(() => {});
+  }, []);
+
+  const setPref = useCallback((p: LangPref) => {
+    setPrefState(p);
+    AsyncStorage.setItem(KEY, p).catch(() => {});
+  }, []);
+
+  const lang: Lang = pref === 'system' ? deviceLang() : pref;
+
+  const t = useCallback<TFn>(
+    (key, vars) => {
+      let s = CATALOGS[lang][key] ?? en[key] ?? key;
+      if (vars) for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
+      return s;
+    },
+    [lang]
+  );
+
+  const value = useMemo<I18nValue>(() => ({ t, lang, pref, setPref }), [t, lang, pref, setPref]);
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function useTranslation(): I18nValue {
+  const ctx = useContext(I18nContext);
+  if (!ctx) throw new Error('useTranslation must be used inside <I18nProvider>');
+  return ctx;
+}

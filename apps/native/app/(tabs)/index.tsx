@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../src/components/Avatar';
+import { useTranslation } from '../../src/i18n';
 import { useStore } from '../../src/store';
 import { Contact, Message } from '../../src/types';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET, UNREAD_BADGE } from '../../src/theme';
@@ -16,6 +17,7 @@ export default function Messages() {
   const { conversations, ready, unreadCount, emergencyId, getContact, sendMessage, isFavorite, toggleFavorite } =
     useStore();
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
@@ -82,7 +84,7 @@ export default function Messages() {
           style={({ pressed }) => [styles.sos, pressed && styles.pressed]}
         >
           <Ionicons name="alert-circle" size={30} color={colors.textOnDark} />
-          <Text style={styles.sosText}>Get help — call {emergency.name}</Text>
+          <Text style={styles.sosText}>{t('messages.getHelp', { name: emergency.name })}</Text>
         </Pressable>
       ) : null}
 
@@ -92,7 +94,7 @@ export default function Messages() {
           style={styles.searchInput}
           value={query}
           onChangeText={setQuery}
-          placeholder="Search messages and people"
+          placeholder={t('messages.search')}
           placeholderTextColor={colors.textMuted}
           autoCapitalize="none"
           autoCorrect={false}
@@ -118,15 +120,15 @@ export default function Messages() {
       ) : conversations.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Ionicons name="chatbubbles-outline" size={72} color={colors.border} />
-          <Text style={styles.emptyTitle}>No chats yet</Text>
-          <Text style={styles.emptyBody}>Add a family member or friend by their phone number to start talking.</Text>
+          <Text style={styles.emptyTitle}>{t('messages.noChats')}</Text>
+          <Text style={styles.emptyBody}>{t('messages.noChatsBody')}</Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => router.push('/new-chat')}
             style={({ pressed }) => [styles.emptyBtn, styles.emptyPrimary, pressed && styles.dim]}
           >
             <Ionicons name="person-add" size={26} color={colors.textOnDark} />
-            <Text style={styles.emptyBtnText}>Add a person</Text>
+            <Text style={styles.emptyBtnText}>{t('messages.addPerson')}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -134,7 +136,7 @@ export default function Messages() {
             style={({ pressed }) => [styles.emptyBtn, styles.emptySecondary, pressed && styles.dim]}
           >
             <Ionicons name="people" size={26} color={colors.textOnDark} />
-            <Text style={styles.emptyBtnText}>New group</Text>
+            <Text style={styles.emptyBtnText}>{t('messages.newGroup')}</Text>
           </Pressable>
         </View>
       ) : (
@@ -219,12 +221,13 @@ function SearchResults({
   messageHits: { contact: Contact; m: Message }[];
   onOpen: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   if (!people.length && !messageHits.length) {
-    return <Text style={styles.muted}>No matches. Try a different word.</Text>;
+    return <Text style={styles.muted}>{t('messages.noMatches')}</Text>;
   }
   return (
     <>
-      {people.length ? <Text style={styles.searchHeading}>People</Text> : null}
+      {people.length ? <Text style={styles.searchHeading}>{t('messages.people')}</Text> : null}
       {people.map((c) => (
         <Pressable
           key={c.id}
@@ -239,7 +242,7 @@ function SearchResults({
           </Text>
         </Pressable>
       ))}
-      {messageHits.length ? <Text style={styles.searchHeading}>Messages</Text> : null}
+      {messageHits.length ? <Text style={styles.searchHeading}>{t('messages.messages')}</Text> : null}
       {messageHits.map(({ contact, m }, i) => (
         <Pressable
           key={`${m.id}-${i}`}

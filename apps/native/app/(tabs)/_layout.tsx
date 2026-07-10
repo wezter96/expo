@@ -2,11 +2,13 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 import { AddButton } from '../../src/components/AddButton';
 import { KinlyTabBar } from '../../src/components/KinlyTabBar';
+import { useTranslation } from '../../src/i18n';
 import { BASE_FONTS } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   return (
     <Tabs
       // Order matters: the middle route ("assistant") becomes the raised button.
@@ -23,9 +25,9 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: colors.background },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Messages', headerRight: () => <AddButton /> }} />
-      <Tabs.Screen name="assistant" options={{ title: 'Assistant' }} />
-      <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
+      <Tabs.Screen name="index" options={{ title: t('tabs.messages'), headerRight: () => <AddButton /> }} />
+      <Tabs.Screen name="assistant" options={{ title: t('tabs.assistant') }} />
+      <Tabs.Screen name="settings" options={{ title: t('tabs.settings') }} />
     </Tabs>
   );
 }

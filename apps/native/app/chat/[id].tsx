@@ -34,6 +34,7 @@ import {
 } from '../../src/api/pocketbase';
 import { Avatar } from '../../src/components/Avatar';
 import { decryptRemoteToLocal } from '../../src/e2ee';
+import { useTranslation } from '../../src/i18n';
 import { useStore } from '../../src/store';
 import { presenceLabel } from '../../src/time';
 import { Message } from '../../src/types';
@@ -82,6 +83,7 @@ export default function Chat() {
   const online = serverEnabled();
   const meId = currentUserId();
   const { colors, fonts, isDark } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const contact = id ? getContact(id) : undefined;
@@ -567,7 +569,7 @@ export default function Chat() {
             </Pressable>
             <TextInput
               style={styles.input}
-              placeholder="Write a message…"
+              placeholder={t('chat.writeMessage')}
               placeholderTextColor={colors.textMuted}
               value={draft}
               onChangeText={setDraft}
