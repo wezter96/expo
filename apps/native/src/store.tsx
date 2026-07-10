@@ -14,6 +14,7 @@ import {
   reportUser,
   serverEnabled,
   setDisappearTimer,
+  setPinnedMessage,
   subscribeMessages,
   unblockUser,
 } from './api/pocketbase';
@@ -71,6 +72,9 @@ type Store = {
   /** Disappearing messages: current timer (seconds) and setter for a conversation. */
   disappearTimerFor: (contactId: string) => number;
   setDisappearing: (contactId: string, seconds: number) => Promise<void>;
+  /** Pinned message: current pinned id (or undefined) and a toggle for a conversation. */
+  pinnedMessageFor: (contactId: string) => string | undefined;
+  setPinned: (contactId: string, messageId: string | undefined) => Promise<void>;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -270,6 +274,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }));
       if (online && uid) {
         await setDisappearTimer(contactId, seconds);
+        await hydrateFromServer();
+      }
+    },
+    [online, uid, hydrateFromServer]
+  );
+
+  const pinnedMessageFor = useCallback(
+    (contactId: string) => state.contacts.find((c) => c.id === contactId)?.pinnedMessage || undefined,
+    [state.contacts]
+  );
+
+  const setPinned = useCallback(
+    async (contactId: string, messageId: string | undefined) => {
+      // Optimistically reflect the pin, then persist + refresh.
+      setState((s) => ({
+        ...s,
+        contacts: s.contacts.map((c) => (c.id === contactId ? { ...c, pinnedMessage: messageId } : c)),
+      }));
+      if (online && uid) {
+        await setPinnedMessage(contactId, messageId ?? '');
         await hydrateFromServer();
       }
     },
@@ -477,6 +501,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     reportContact,
     disappearTimerFor,
     setDisappearing,
+    pinnedMessageFor,
+    setPinned,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

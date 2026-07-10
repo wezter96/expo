@@ -61,6 +61,10 @@ migrate(
         // (0 / empty = off). Swept by a cron hook; clients also hide expired
         // messages immediately.
         { type: 'number', name: 'disappearTimer', min: 0 },
+        // id of the currently pinned message (empty = none). Stored as text
+        // rather than a relation because messages is defined after this
+        // collection; any member may pin/unpin (guarded by updateRule).
+        { type: 'text', name: 'pinnedMessage', max: 40 },
         {
           type: 'relation',
           name: 'members',

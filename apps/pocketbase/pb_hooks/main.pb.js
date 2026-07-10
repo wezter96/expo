@@ -48,6 +48,8 @@ function mapConversation(conv, meId) {
     members: others,
     // Disappearing-messages timer (seconds; 0 = off).
     disappearTimer: conv.getInt('disappearTimer') || 0,
+    // id of the pinned message ('' = none).
+    pinnedMessage: conv.getString('pinnedMessage') || '',
   };
 }
 

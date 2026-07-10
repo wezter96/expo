@@ -89,6 +89,9 @@ const en: Record<string, string> = {
 
   'chat.writeMessage': 'Write a message…',
   'chat.photos': 'Photos',
+  'chat.pin': 'Pin',
+  'chat.unpin': 'Unpin',
+  'chat.pinned': 'Pinned message',
 
   'album.title': 'Photos',
   'album.empty': 'No photos yet',
@@ -184,6 +187,9 @@ const sv: Record<string, string> = {
 
   'chat.writeMessage': 'Skriv ett meddelande…',
   'chat.photos': 'Foton',
+  'chat.pin': 'Fäst',
+  'chat.unpin': 'Ta bort fäst',
+  'chat.pinned': 'Fäst meddelande',
 
   'album.title': 'Foton',
   'album.empty': 'Inga foton än',

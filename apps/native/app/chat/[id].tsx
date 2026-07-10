@@ -68,6 +68,8 @@ export default function Chat() {
     reportContact,
     disappearTimerFor,
     setDisappearing,
+    pinnedMessageFor,
+    setPinned,
   } = useStore();
   const [draft, setDraft] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -90,6 +92,13 @@ export default function Chat() {
   const messages = id ? messagesFor(id) : [];
   const disappearSecs = id ? disappearTimerFor(id) : 0;
   const encrypted = messages.some((m) => m.encrypted);
+  const pinnedId = id ? pinnedMessageFor(id) : undefined;
+  const pinnedMsg = pinnedId ? messages.find((m) => m.id === pinnedId) : undefined;
+
+  const jumpToPinned = () => {
+    const idx = pinnedMsg ? messages.findIndex((m) => m.id === pinnedMsg.id) : -1;
+    if (idx >= 0) listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.3 });
+  };
 
   // Reactions + read receipts (server-backed), refreshed on any change.
   useEffect(() => {
@@ -270,10 +279,19 @@ export default function Chat() {
     ]);
   }
 
+  const pinAction = (m: Message) => {
+    const pinned = pinnedMessageFor(contact!.id) === m.id;
+    return {
+      text: pinned ? t('chat.unpin') : t('chat.pin'),
+      onPress: () => void setPinned(contact!.id, pinned ? undefined : m.id),
+    };
+  };
+
   function mineActions(m: Message) {
     const opts: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [];
     if (m.kind === 'text') opts.push({ text: 'Edit', onPress: () => startEdit(m) });
     opts.push({ text: 'Reply', onPress: () => startReply(m) });
+    if (online) opts.push(pinAction(m));
     opts.push({ text: 'Delete', style: 'destructive', onPress: () => promptDelete(m.id) });
     opts.push({ text: 'Cancel', style: 'cancel' });
     Alert.alert('Message', undefined, opts);
@@ -282,6 +300,7 @@ export default function Chat() {
   function theirActions(m: Message, spoken: string) {
     const opts: { text: string; style?: 'cancel'; onPress?: () => void }[] = [{ text: 'Reply', onPress: () => startReply(m) }];
     if (online) opts.push({ text: 'React', onPress: () => setReactingTo(m.id) });
+    if (online) opts.push(pinAction(m));
     opts.push({ text: 'Read aloud', onPress: () => speak(spoken) });
     opts.push({ text: 'Cancel', style: 'cancel' });
     Alert.alert('Message', undefined, opts);
@@ -432,11 +451,29 @@ export default function Chat() {
           <Text style={styles.disappearNoteText}>Messages disappear {disappearingLabel(disappearSecs).toLowerCase()}</Text>
         </View>
       ) : null}
+      {pinnedMsg ? (
+        <View style={styles.pinnedBar}>
+          <Ionicons name="pin" size={18} color={colors.primary} />
+          <Pressable style={styles.pinnedTextWrap} accessibilityRole="button" accessibilityLabel={t('chat.pinned')} onPress={jumpToPinned}>
+            <Text style={styles.pinnedLabel}>{t('chat.pinned')}</Text>
+            <Text style={styles.pinnedText} numberOfLines={1}>{previewOf(pinnedMsg)}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.unpin')}
+            onPress={() => void setPinned(contact.id, undefined)}
+            hitSlop={10}
+          >
+            <Ionicons name="close" size={22} color={colors.textMuted} />
+          </Pressable>
+        </View>
+      ) : null}
 
       <FlatList
         ref={listRef}
         data={messages}
         keyExtractor={(m) => m.id}
+        onScrollToIndexFailed={() => {}}
         contentContainerStyle={styles.listContent}
         renderItem={({ item, index }) => {
           // Group consecutive messages from the same person: only the first of
@@ -830,6 +867,19 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     backgroundColor: colors.bubbleTheirs,
   },
   disappearNoteText: { fontSize: fonts.small, color: colors.primary, fontWeight: '700' },
+  pinnedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.card,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.border,
+  },
+  pinnedTextWrap: { flex: 1 },
+  pinnedLabel: { fontSize: fonts.small - 2, color: colors.primary, fontWeight: '800' },
+  pinnedText: { fontSize: fonts.small, color: colors.text, fontWeight: '600' },
   encNote: {
     flexDirection: 'row',
     alignItems: 'center',

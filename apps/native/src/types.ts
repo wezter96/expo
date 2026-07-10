@@ -15,6 +15,8 @@ export type Contact = {
   members?: Member[];
   /** Disappearing-messages timer in seconds (0 / undefined = off). */
   disappearTimer?: number;
+  /** id of the pinned message in this conversation, if any. */
+  pinnedMessage?: string;
 };
 
 export type MessageKind = 'text' | 'photo' | 'voice';

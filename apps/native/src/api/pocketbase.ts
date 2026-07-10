@@ -99,6 +99,7 @@ type ConversationDTO = {
   memberNames: string[];
   members: MemberDTO[];
   disappearTimer?: number;
+  pinnedMessage?: string;
 };
 
 /** Build a public file URL for a PocketBase record file field. */
@@ -125,6 +126,7 @@ function toContact(c: ConversationDTO): Contact {
     avatar: c.isGroup ? undefined : members[0]?.avatar,
     members,
     disappearTimer: c.disappearTimer ?? 0,
+    pinnedMessage: c.pinnedMessage || undefined,
   };
 }
 
@@ -539,6 +541,12 @@ export async function pushVoice(id: string, contactId: string, uri: string, dura
 export async function setDisappearTimer(conversationId: string, seconds: number): Promise<void> {
   if (!pb) return;
   await pb.collection('conversations').update(conversationId, { disappearTimer: Math.max(0, Math.round(seconds)) });
+}
+
+/** Pin (or, with an empty id, unpin) a message for everyone in a conversation. */
+export async function setPinnedMessage(conversationId: string, messageId: string): Promise<void> {
+  if (!pb) return;
+  await pb.collection('conversations').update(conversationId, { pinnedMessage: messageId });
 }
 
 /** Delete (unsend) a message. Only the author may; realtime removes it for everyone. */
