@@ -8,7 +8,8 @@
  */
 import { entropyToMnemonic, mnemonicToEntropy, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { fromB64, generateKeyPair, type KeyPair, publicKeyOf, toB64 } from './primitives';
+import { kemKeypairFromSeed } from './conversation';
+import { fromB64, generateKeyPair, kdf, type KeyPair, publicKeyOf, toB64 } from './primitives';
 import { secureDelete, secureGet, secureSet, secureStorageAvailable } from './secure-store';
 
 const ID_KEY = 'kinly_e2ee_identity_v1';
@@ -46,10 +47,17 @@ export async function getPrekey(): Promise<KeyPair> {
   return kp;
 }
 
-/** Public keys to publish to the server (base64). */
-export async function publicBundle(): Promise<{ identity: string; prekey: string }> {
-  const [id, pre] = await Promise.all([getIdentity(), getPrekey()]);
-  return { identity: toB64(id.publicKey), prekey: toB64(pre.publicKey) };
+/** The post-quantum (ML-KEM-768) keypair, derived deterministically from the
+ *  identity key — so restoring the identity restores this too. */
+export async function getKemKeypair(): Promise<{ publicKey: Uint8Array; secretKey: Uint8Array }> {
+  const id = await getIdentity();
+  return kemKeypairFromSeed(kdf(id.secretKey, 'kinly-kem-seed', 64));
+}
+
+/** Public keys to publish to the server (base64): classical + post-quantum. */
+export async function publicBundle(): Promise<{ identity: string; prekey: string; kem: string }> {
+  const [id, pre, kem] = await Promise.all([getIdentity(), getPrekey(), getKemKeypair()]);
+  return { identity: toB64(id.publicKey), prekey: toB64(pre.publicKey), kem: toB64(kem.publicKey) };
 }
 
 /** 24-word recovery phrase encoding the identity key. Show once, store safely. */

@@ -232,8 +232,8 @@ export async function publishE2EEKeys(): Promise<void> {
     const bundle = await e2ee.e2eePublicBundle();
     if (!bundle) return; // web / unsupported
     const rec = pb.authStore.record;
-    if (rec.identityKey === bundle.identity && rec.prekeyKey === bundle.prekey) return;
-    await pb.collection('users').update(rec.id, { identityKey: bundle.identity, prekeyKey: bundle.prekey });
+    if (rec.identityKey === bundle.identity && rec.prekeyKey === bundle.prekey && rec.kemKey === bundle.kem) return;
+    await pb.collection('users').update(rec.id, { identityKey: bundle.identity, prekeyKey: bundle.prekey, kemKey: bundle.kem });
     await pb.collection('users').authRefresh();
   } catch {
     // non-fatal; messages fall back to plaintext until keys publish
@@ -295,7 +295,7 @@ async function latestConvKey(conversationId: string): Promise<{ key: Uint8Array;
 async function distributeKey(conversationId: string, members: RecordModel[], epoch: number): Promise<Uint8Array> {
   const key = e2ee.newConvKey();
   for (const m of members) {
-    const wrapped = await e2ee.wrapConvKeyFor(m.identityKey as string, key);
+    const wrapped = await e2ee.wrapConvKeyFor(m.identityKey as string, m.kemKey as string, key);
     await pb!
       .collection('conversation_keys')
       .create({ conversation: conversationId, member: m.id, wrappedBy: pb!.authStore.record!.id, epoch, wrappedKey: wrapped });
@@ -316,7 +316,7 @@ async function ensureConvKey(conversationId: string): Promise<{ key: Uint8Array;
   try {
     const conv = await pb.collection('conversations').getOne(conversationId, { expand: 'members' });
     const members = ((conv.expand as { members?: RecordModel[] } | undefined)?.members ?? []) as RecordModel[];
-    if (!members.length || members.some((m) => !m.identityKey)) return null;
+    if (!members.length || members.some((m) => !m.identityKey || !m.kemKey)) return null;
     const key = await distributeKey(conversationId, members, 0);
     return { key, epoch: 0 };
   } catch {
@@ -336,7 +336,7 @@ export async function rotateConvKey(conversationId: string): Promise<void> {
     const nextEpoch = (latest?.epoch ?? -1) + 1;
     const conv = await pb.collection('conversations').getOne(conversationId, { expand: 'members' });
     const members = ((conv.expand as { members?: RecordModel[] } | undefined)?.members ?? []) as RecordModel[];
-    if (!members.length || members.some((m) => !m.identityKey)) return;
+    if (!members.length || members.some((m) => !m.identityKey || !m.kemKey)) return;
     await distributeKey(conversationId, members, nextEpoch);
   } catch {
     // best-effort; next send will still use the existing key

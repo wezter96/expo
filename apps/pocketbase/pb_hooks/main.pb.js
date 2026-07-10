@@ -16,9 +16,10 @@ function userBrief(id) {
       lastSeen: u.getString('lastSeen') || '',
       identityKey: u.getString('identityKey') || '',
       prekeyKey: u.getString('prekeyKey') || '',
+      kemKey: u.getString('kemKey') || '',
     };
   } catch (_) {
-    return { id: id, name: 'Someone', phone: '', username: '', avatar: '', lastSeen: '', identityKey: '', prekeyKey: '' };
+    return { id: id, name: 'Someone', phone: '', username: '', avatar: '', lastSeen: '', identityKey: '', prekeyKey: '', kemKey: '' };
   }
 }
 

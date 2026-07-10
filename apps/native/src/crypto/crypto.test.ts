@@ -9,9 +9,12 @@ import {
 } from './primitives';
 import {
   deriveSharedSecret,
+  kemKeypairFromSeed,
   newConversationKey,
   unwrapKey,
+  unwrapKeyHybrid,
   wrapKey,
+  wrapKeyHybrid,
 } from './conversation';
 import {
   initInitiator,
@@ -28,6 +31,7 @@ import {
   senderEncrypt,
 } from './senderKeys';
 import { decodePayload, encodePayload } from './messages';
+import { safetyNumber } from './safety';
 
 let pass = 0;
 let fail = 0;
@@ -134,6 +138,45 @@ for (const n of [0, 1, 2, 3, 16, 31, 32, 100]) {
   const p = { t: 'hi', m: { key: toB64(randomBytes(32)), kind: 'photo' as const } };
   const round = decodePayload(encodePayload(p));
   ok('payload roundtrip', round.t === 'hi' && round.m?.kind === 'photo' && round.m.key === p.m.key);
+}
+
+// 8. Hybrid post-quantum key wrap (X25519 + ML-KEM-768)
+{
+  const alice = generateKeyPair();
+  const bob = generateKeyPair();
+  const bobKem = kemKeypairFromSeed(randomBytes(64));
+  const convKey = newConversationKey();
+  const wrapped = wrapKeyHybrid(alice.secretKey, bob.publicKey, bobKem.publicKey, convKey);
+  ok('hybrid wrap/unwrap', same(unwrapKeyHybrid(bob.secretKey, alice.publicKey, bobKem.secretKey, wrapped), convKey));
+  const t = wrapped.slice();
+  t[t.length - 1] ^= 1;
+  let threw = false;
+  try {
+    unwrapKeyHybrid(bob.secretKey, alice.publicKey, bobKem.secretKey, t);
+  } catch {
+    threw = true;
+  }
+  ok('hybrid rejects tamper', threw);
+  const wrongKem = kemKeypairFromSeed(randomBytes(64));
+  let threw2 = false;
+  try {
+    unwrapKeyHybrid(bob.secretKey, alice.publicKey, wrongKem.secretKey, wrapped);
+  } catch {
+    threw2 = true;
+  }
+  ok('hybrid needs the right PQ key', threw2);
+}
+
+// 9. Safety numbers (contact verification)
+{
+  const a = generateKeyPair();
+  const b = generateKeyPair();
+  const c = generateKeyPair();
+  const n1 = safetyNumber(a.publicKey, b.publicKey);
+  const n2 = safetyNumber(b.publicKey, a.publicKey);
+  ok('safety number symmetric', n1 === n2);
+  ok('safety number format (60 digits, grouped)', /^(\d{5} ){11}\d{5}$/.test(n1));
+  ok('safety number differs for different peer', safetyNumber(a.publicKey, c.publicKey) !== n1);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -313,6 +313,7 @@ export default function Chat() {
     if (contact!.isGroup) {
       opts.push({ text: 'Group info & members', onPress: () => router.push(`/group/${contact!.id}`) });
     } else if (other) {
+      opts.push({ text: 'Verify security number', onPress: () => router.push(`/verify?id=${contact!.id}`) });
       const blocked = isBlocked(other.id);
       opts.push(
         blocked

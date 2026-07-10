@@ -33,10 +33,18 @@ user has to understand.**
   restore via the 24-word phrase or **QR device linking** (`crypto/linking.ts`,
   `app/link-device.tsx`: show a QR + 6-digit PIN on one device, scan on the
   other). Linking crypto is Node-tested (`linking.test.ts`).
+- ✅ **Post-quantum** — conversation keys are wrapped with a **hybrid X25519 +
+  ML-KEM-768** scheme (`wrapKeyHybrid`), so "harvest now, decrypt later" quantum
+  attackers can't unwrap them. The ML-KEM key derives from the identity key
+  (one recovery phrase restores both). Node-tested.
+- ✅ **Safety numbers** — out-of-band contact verification (`safety.ts`,
+  `app/verify.tsx`; chat ⋮ → *Verify security number*).
 - ⏳ **Key backup to OS cloud keychain** — designed; recovery-phrase + QR link
   cover backup/transfer today.
-- ⏳ **Sealed sender, private contact discovery, PQ** — not started (see the
-  "compete with Signal" analysis).
+- ⏳ **Sealed sender, private contact discovery** — not started (metadata gap;
+  see SECURITY.md and the "compete with Signal" analysis).
+
+See **SECURITY.md** for the full threat model + audit brief.
 
 > ⚠️ **The crypto has NOT had a professional audit.** Home-grown protocol wiring
 > (X3DH-lite, ratchet integration) especially must be reviewed by a

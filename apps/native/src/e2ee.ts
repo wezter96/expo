@@ -13,17 +13,18 @@
  * ⚠️ Not professionally audited. Keep this module free of server imports so it
  * stays cycle-free and testable.
  */
-import { newConversationKey, unwrapKey, wrapKey } from './crypto/conversation';
-import { e2eeSupported, getIdentity, publicBundle } from './crypto/identity';
+import { newConversationKey, unwrapKeyHybrid, wrapKeyHybrid } from './crypto/conversation';
+import { e2eeSupported, getIdentity, getKemKeypair, publicBundle } from './crypto/identity';
 import { decodePayload, encodePayload, type MessagePayload } from './crypto/messages';
 import { aeadDecrypt, aeadEncrypt, fromB64, toB64 } from './crypto/primitives';
+import { safetyNumber } from './crypto/safety';
 
 export { e2eeSupported };
 export { decryptRemoteToLocal, encryptFileToTemp } from './crypto/media-io';
 export type { MessagePayload };
 
 /** Public keys to publish to the server (null on web / unsupported). */
-export async function e2eePublicBundle(): Promise<{ identity: string; prekey: string } | null> {
+export async function e2eePublicBundle(): Promise<{ identity: string; prekey: string; kem: string } | null> {
   if (!e2eeSupported) return null;
   return publicBundle();
 }
@@ -33,16 +34,18 @@ export function newConvKey(): Uint8Array {
   return newConversationKey();
 }
 
-/** Wrap a conversation key for a member, given their base64 identity public key. */
-export async function wrapConvKeyFor(memberIdentityB64: string, convKey: Uint8Array): Promise<string> {
+/** Wrap a conversation key for a member (hybrid: X25519 + ML-KEM), given their
+ *  base64 identity and post-quantum public keys. */
+export async function wrapConvKeyFor(memberIdentityB64: string, memberKemB64: string, convKey: Uint8Array): Promise<string> {
   const me = await getIdentity();
-  return toB64(wrapKey(me.secretKey, fromB64(memberIdentityB64), convKey));
+  return toB64(wrapKeyHybrid(me.secretKey, fromB64(memberIdentityB64), fromB64(memberKemB64), convKey));
 }
 
 /** Unwrap a conversation key wrapped for me by `wrappedByIdentityB64`. */
 export async function unwrapConvKey(wrappedB64: string, wrappedByIdentityB64: string): Promise<Uint8Array> {
   const me = await getIdentity();
-  return unwrapKey(me.secretKey, fromB64(wrappedByIdentityB64), fromB64(wrappedB64));
+  const kem = await getKemKeypair();
+  return unwrapKeyHybrid(me.secretKey, fromB64(wrappedByIdentityB64), kem.secretKey, fromB64(wrappedB64));
 }
 
 /** Seal a message payload with a conversation key → base64 ciphertext. */
@@ -53,4 +56,11 @@ export function sealPayload(convKey: Uint8Array, payload: MessagePayload): strin
 /** Open a sealed payload. Throws if the key is wrong or data is tampered. */
 export function openPayload(convKey: Uint8Array, cipherB64: string): MessagePayload {
   return decodePayload(aeadDecrypt(convKey, fromB64(cipherB64)));
+}
+
+/** The shared safety number to compare with a contact (null if not possible). */
+export async function safetyNumberWith(peerIdentityB64: string): Promise<string | null> {
+  if (!e2eeSupported || !peerIdentityB64) return null;
+  const me = await getIdentity();
+  return safetyNumber(me.publicKey, fromB64(peerIdentityB64));
 }

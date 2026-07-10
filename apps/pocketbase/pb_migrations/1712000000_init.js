@@ -28,6 +28,8 @@ migrate(
     // device. identityKey = long-term X25519; prekeyKey = initial ratchet key.
     users.fields.add(new Field({ type: 'text', name: 'identityKey', max: 100 }));
     users.fields.add(new Field({ type: 'text', name: 'prekeyKey', max: 100 }));
+    // Post-quantum public key (ML-KEM-768, base64 ≈ 1580 chars) for hybrid wrap.
+    users.fields.add(new Field({ type: 'text', name: 'kemKey', max: 2000 }));
     users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
     users.indexes.push("CREATE UNIQUE INDEX idx_users_username ON users (username) WHERE username != ''");
     // Any signed-in user can view a user record (needed to show names & photos
@@ -225,7 +227,7 @@ migrate(
         { type: 'relation', name: 'member', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
         { type: 'relation', name: 'wrappedBy', cascadeDelete: false, maxSelect: 1, collectionId: users.id },
         { type: 'number', name: 'epoch', min: 0 },
-        { type: 'text', name: 'wrappedKey', required: true, max: 400 },
+        { type: 'text', name: 'wrappedKey', required: true, max: 4000 },
         { type: 'autodate', name: 'created', onCreate: true },
       ],
       indexes: ['CREATE UNIQUE INDEX idx_convkeys_member_epoch ON conversation_keys (conversation, member, epoch)'],
@@ -242,7 +244,7 @@ migrate(
     }
     try {
       const users = app.findCollectionByNameOrId('users');
-      for (const f of ['phone', 'username', 'pushToken', 'lastSeen', 'blocked', 'identityKey', 'prekeyKey']) {
+      for (const f of ['phone', 'username', 'pushToken', 'lastSeen', 'blocked', 'identityKey', 'prekeyKey', 'kemKey']) {
         if (users.fields.getByName(f)) users.fields.removeByName(f);
       }
       app.save(users);

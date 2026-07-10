@@ -14,5 +14,8 @@
     "turbo": "^2.10.2",
     "typescript": "~5.9.2"
   },
-  "packageManager": "npm@10.9.7"
+  "packageManager": "npm@10.9.7",
+  "dependencies": {
+    "@noble/post-quantum": "^0.6.1"
+  }
 }

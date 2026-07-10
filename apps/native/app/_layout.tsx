@@ -68,6 +68,7 @@ function Gate() {
         <Stack.Screen name="display" options={{ title: 'Display', presentation: 'modal' }} />
         <Stack.Screen name="encryption" options={{ title: 'Encryption', presentation: 'modal' }} />
         <Stack.Screen name="link-device" options={{ title: 'Link a device', presentation: 'modal' }} />
+        <Stack.Screen name="verify" options={{ title: 'Verify', presentation: 'modal' }} />
       </Stack>
       <IncomingCallOverlay />
     </>

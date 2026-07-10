@@ -6,7 +6,10 @@
  *
  * Also derives the pairwise shared secret used to bootstrap the 1:1 ratchet.
  */
-import { aeadDecrypt, aeadEncrypt, dh, kdf, randomBytes } from './primitives';
+import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
+import { aeadDecrypt, aeadEncrypt, concat, dh, kdf, randomBytes } from './primitives';
+
+const MLKEM_CT = ml_kem768.lengths.cipherText; // 1088
 
 /** A fresh 32-byte symmetric key for a conversation. */
 export function newConversationKey(): Uint8Array {
@@ -32,4 +35,44 @@ export function unwrapKey(mySecret: Uint8Array, senderPublic: Uint8Array, sealed
  */
 export function deriveSharedSecret(myIdentitySecret: Uint8Array, peerIdentityPublic: Uint8Array): Uint8Array {
   return kdf(dh(myIdentitySecret, peerIdentityPublic), 'kinly-x3dh');
+}
+
+// --- hybrid (classical + post-quantum) key wrapping ------------------------
+//
+// Wraps a conversation key so an attacker must break BOTH X25519 *and*
+// ML-KEM-768 (a "harvest now, decrypt later" quantum adversary can't read it).
+// Output = ML-KEM ciphertext (1088B) || AEAD(convKey). The wrap key mixes the
+// classical DH secret and the post-quantum shared secret.
+
+function hybridWrapKey(classicalSecret: Uint8Array, pqSecret: Uint8Array): Uint8Array {
+  return kdf(concat(kdf(classicalSecret, 'kinly-hybrid-x25519'), kdf(pqSecret, 'kinly-hybrid-mlkem')), 'kinly-hybrid-wrap');
+}
+
+export function wrapKeyHybrid(
+  mySecret: Uint8Array,
+  recipientIdentityPublic: Uint8Array,
+  recipientKemPublic: Uint8Array,
+  keyMaterial: Uint8Array
+): Uint8Array {
+  const { cipherText, sharedSecret } = ml_kem768.encapsulate(recipientKemPublic);
+  const wrapKey = hybridWrapKey(dh(mySecret, recipientIdentityPublic), sharedSecret);
+  return concat(cipherText, aeadEncrypt(wrapKey, keyMaterial));
+}
+
+export function unwrapKeyHybrid(
+  mySecret: Uint8Array,
+  senderIdentityPublic: Uint8Array,
+  myKemSecret: Uint8Array,
+  data: Uint8Array
+): Uint8Array {
+  const cipherText = data.subarray(0, MLKEM_CT);
+  const sealed = data.subarray(MLKEM_CT);
+  const sharedSecret = ml_kem768.decapsulate(cipherText, myKemSecret);
+  const wrapKey = hybridWrapKey(dh(mySecret, senderIdentityPublic), sharedSecret);
+  return aeadDecrypt(wrapKey, sealed);
+}
+
+/** Deterministic ML-KEM-768 keypair from a 64-byte seed (derived from identity). */
+export function kemKeypairFromSeed(seed: Uint8Array): { publicKey: Uint8Array; secretKey: Uint8Array } {
+  return ml_kem768.keygen(seed);
 }
