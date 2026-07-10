@@ -163,6 +163,71 @@ routerAdd('POST', '/api/kinly/direct', (e) => {
   return e.json(200, { id: conv.id });
 });
 
+// Unambiguous invite-code alphabet (no 0/O/1/I/L) so codes are easy to read
+// aloud and retype. Not security-sensitive on its own — the code only grants
+// group membership, and joins are logged as member changes.
+const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function makeInviteCode() {
+  let s = '';
+  for (let i = 0; i < 8; i++) s += INVITE_ALPHABET[Math.floor(Math.random() * INVITE_ALPHABET.length)];
+  return s;
+}
+
+/** Return (creating if needed) a group's shareable invite code. Members only.
+ *  POST /api/kinly/group/invite { conversationId } */
+routerAdd('POST', '/api/kinly/group/invite', (e) => {
+  const auth = e.auth;
+  if (!auth) return e.json(401, { error: 'Please sign in.' });
+  const info = e.requestInfo();
+  const convId = String((info.body && info.body.conversationId) || '').trim();
+  if (!convId) return e.json(400, { error: 'Missing group.' });
+
+  let conv;
+  try {
+    conv = $app.findRecordById('conversations', convId);
+  } catch (_) {
+    return e.json(404, { error: 'Group not found.' });
+  }
+  if (!conv.getBool('isGroup')) return e.json(400, { error: 'Only groups have invite links.' });
+  const members = conv.get('members') || [];
+  if (members.indexOf(auth.id) === -1) return e.json(403, { error: 'Only members can share this group.' });
+
+  let code = conv.getString('inviteCode');
+  if (!code) {
+    code = makeInviteCode();
+    conv.set('inviteCode', code);
+    $app.save(conv);
+  }
+  return e.json(200, { code: code });
+});
+
+/** Join a group by its invite code. Adds the caller as a member.
+ *  POST /api/kinly/group/join { code } */
+routerAdd('POST', '/api/kinly/group/join', (e) => {
+  const auth = e.auth;
+  if (!auth) return e.json(401, { error: 'Please sign in.' });
+  if (rateLimited(auth.id, 30, 60 * 60 * 1000)) {
+    return e.json(429, { error: 'Too many attempts. Please wait a little while and try again.' });
+  }
+  const info = e.requestInfo();
+  const code = String((info.body && info.body.code) || '').trim().toUpperCase();
+  if (!code) return e.json(400, { error: 'Enter an invite code.' });
+
+  let conv;
+  try {
+    conv = $app.findFirstRecordByFilter('conversations', 'inviteCode = {:c} && isGroup = true', { c: code });
+  } catch (_) {
+    return e.json(404, { error: 'That invite code is not valid. Please check it and try again.' });
+  }
+  const members = conv.get('members') || [];
+  if (members.indexOf(auth.id) !== -1) return e.json(200, { id: conv.id });
+  if (members.length >= 50) return e.json(400, { error: 'This group is full.' });
+
+  conv.set('members', members.concat([auth.id]));
+  $app.save(conv);
+  return e.json(200, { id: conv.id });
+});
+
 /** The caller's conversations, mapped for display. GET /api/kinly/conversations */
 routerAdd('GET', '/api/kinly/conversations', (e) => {
   const auth = e.auth;

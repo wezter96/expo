@@ -65,6 +65,8 @@ function Gate() {
         <Stack.Screen name="call/[id]" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="new-chat" options={{ title: 'Add a person', presentation: 'modal' }} />
         <Stack.Screen name="new-group" options={{ title: 'New group', presentation: 'modal' }} />
+        <Stack.Screen name="join/index" options={{ title: 'Join a group', presentation: 'modal' }} />
+        <Stack.Screen name="join/[code]" options={{ title: 'Join a group', presentation: 'modal' }} />
         <Stack.Screen name="profile" options={{ title: 'Your profile', presentation: 'modal' }} />
         <Stack.Screen name="emergency" options={{ title: 'Emergency contact', presentation: 'modal' }} />
         <Stack.Screen name="checkin" options={{ title: 'Daily check-in', presentation: 'modal' }} />

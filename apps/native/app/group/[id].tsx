@@ -1,16 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   currentUserId,
   fetchKnownPeople,
+  getGroupInvite,
   renameGroup,
+  serverEnabled,
   updateGroupMembers,
   type KnownPerson,
 } from '../../src/api/pocketbase';
 import { Avatar } from '../../src/components/Avatar';
+import { useTranslation } from '../../src/i18n';
 import { useStore } from '../../src/store';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
@@ -21,7 +24,9 @@ export default function GroupSettings() {
   const insets = useSafeAreaInsets();
   const { getContact, refresh } = useStore();
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const [inviting, setInviting] = useState(false);
 
   const contact = id ? getContact(id) : undefined;
   const me = currentUserId();
@@ -78,6 +83,26 @@ export default function GroupSettings() {
     await updateGroupMembers(contact.id, [...currentIds, personId]);
     await refresh();
     setPeople((p) => p.filter((x) => x.id !== personId));
+  };
+
+  const shareInvite = async () => {
+    if (!serverEnabled()) {
+      Alert.alert(t('group.inviteLink'), t('join.offline'));
+      return;
+    }
+    setInviting(true);
+    try {
+      const code = await getGroupInvite(contact.id);
+      if (!code) throw new Error('no code');
+      const link = `kinly://join/${code}`;
+      await Share.share({
+        message: t('group.inviteMessage', { title: contact.name, code, link }),
+      });
+    } catch {
+      Alert.alert(t('group.inviteLink'), t('group.inviteError'));
+    } finally {
+      setInviting(false);
+    }
   };
 
   const leave = () => {
@@ -143,6 +168,21 @@ export default function GroupSettings() {
         </>
       ) : null}
 
+      <Text style={styles.label}>{t('group.inviteLink')}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('group.shareInvite')}
+        onPress={shareInvite}
+        disabled={inviting}
+        style={({ pressed }) => [styles.invite, (pressed || inviting) && styles.pressed]}
+      >
+        <Ionicons name="share-social-outline" size={26} color={colors.primary} />
+        <View style={styles.inviteText}>
+          <Text style={styles.inviteTitle}>{t('group.shareInvite')}</Text>
+          <Text style={styles.inviteBody}>{t('group.inviteBody')}</Text>
+        </View>
+      </Pressable>
+
       <Pressable onPress={leave} style={({ pressed }) => [styles.leave, pressed && styles.pressed]}>
         <Ionicons name="exit-outline" size={26} color={colors.danger} />
         <Text style={styles.leaveText}>Leave group</Text>
@@ -171,6 +211,19 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   member: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   memberName: { flex: 1, fontSize: fonts.body, fontWeight: '700', color: colors.text },
   pressed: { opacity: 0.7 },
+  invite: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  inviteText: { flex: 1 },
+  inviteTitle: { fontSize: fonts.body, fontWeight: '800', color: colors.primary },
+  inviteBody: { fontSize: fonts.small, color: colors.textMuted, marginTop: 2 },
   leave: {
     flexDirection: 'row',
     alignItems: 'center',

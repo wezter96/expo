@@ -65,6 +65,9 @@ migrate(
         // rather than a relation because messages is defined after this
         // collection; any member may pin/unpin (guarded by updateRule).
         { type: 'text', name: 'pinnedMessage', max: 40 },
+        // Shareable group invite code (empty = no active link). Redeemed via
+        // the /api/kinly/group/join route, which adds the caller as a member.
+        { type: 'text', name: 'inviteCode', max: 24 },
         {
           type: 'relation',
           name: 'members',

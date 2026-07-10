@@ -253,6 +253,26 @@ export async function updateGroupMembers(conversationId: string, memberIds: stri
   await rotateConvKey(conversationId);
 }
 
+/** Fetch (creating on first use) a group's shareable invite code. */
+export async function getGroupInvite(conversationId: string): Promise<string | null> {
+  if (!pb) return null;
+  const res = await pb.send<{ code: string }>('/api/kinly/group/invite', {
+    method: 'POST',
+    body: { conversationId },
+  });
+  return res.code ?? null;
+}
+
+/** Join a group by its invite code. Returns the conversation id on success. */
+export async function joinGroupByCode(code: string): Promise<string | null> {
+  if (!pb) return null;
+  const res = await pb.send<{ id: string }>('/api/kinly/group/join', {
+    method: 'POST',
+    body: { code: code.trim().toUpperCase() },
+  });
+  return res.id ?? null;
+}
+
 // --- end-to-end encryption -------------------------------------------------
 
 /** Publish this device's E2EE public keys (call after sign-in). Idempotent. */
