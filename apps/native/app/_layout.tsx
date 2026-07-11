@@ -14,6 +14,7 @@ import { AppLockProvider, LockOverlay } from '../src/applock';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
 import { AuthScreen } from '../src/auth/AuthScreen';
 import { IncomingCallOverlay } from '../src/calls/IncomingCallOverlay';
+import { RemotePrefsSync } from '../src/components/RemotePrefsSync';
 import { WebNotice } from '../src/components/WebNotice';
 import { applyGlobalFont } from '../src/global-font';
 import { I18nProvider } from '../src/i18n';
@@ -65,6 +66,7 @@ function Gate() {
         <Stack.Screen name="saved" options={{ title: 'Saved messages' }} />
         <Stack.Screen name="reminders" options={{ title: 'Reminders', presentation: 'modal' }} />
         <Stack.Screen name="guardians" options={{ title: 'Family help', presentation: 'modal' }} />
+        <Stack.Screen name="dashboard" options={{ title: 'Family dashboard' }} />
         <Stack.Screen name="ward/[id]" options={{ title: 'Help set up' }} />
         <Stack.Screen name="call/[id]" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="new-chat" options={{ title: 'Add a person', presentation: 'modal' }} />
@@ -115,6 +117,7 @@ export default function RootLayout() {
             <AuthProvider>
               <StoreProvider>
                 <ThemedStatusBar />
+                <RemotePrefsSync />
                 <WebNotice />
                 <Gate />
                 <LockOverlay />

@@ -116,6 +116,13 @@ export default function Settings() {
       onPress: () => router.push('/guardians'),
     },
     {
+      icon: 'grid',
+      label: t('dashboard.title'),
+      value: t('dashboard.settingsValue'),
+      color: colors.primary,
+      onPress: () => router.push('/dashboard'),
+    },
+    {
       icon: 'help-circle',
       label: t('settings.help'),
       onPress: () =>

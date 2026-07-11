@@ -36,6 +36,10 @@ migrate(
     users.fields.add(
       new Field({ type: 'relation', name: 'caregiver', collectionId: users.id, cascadeDelete: false, maxSelect: 1 })
     );
+    // Server-synced display prefs (JSON: { textSize, mode, updatedAt }) so an
+    // active guardian can adjust them remotely; the owner's device applies
+    // newer server prefs on launch (see /api/kinly/ward/prefs).
+    users.fields.add(new Field({ type: 'text', name: 'prefs', max: 500 }));
     users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
     users.indexes.push("CREATE UNIQUE INDEX idx_users_username ON users (username) WHERE username != ''");
     // Any signed-in user can view a user record (needed to show names & photos
@@ -347,7 +351,7 @@ migrate(
     }
     try {
       const users = app.findCollectionByNameOrId('users');
-      for (const f of ['phone', 'username', 'pushToken', 'lastSeen', 'blocked', 'identityKey', 'prekeyKey', 'kemKey', 'lastCheckIn', 'caregiver']) {
+      for (const f of ['phone', 'username', 'pushToken', 'lastSeen', 'blocked', 'identityKey', 'prekeyKey', 'kemKey', 'lastCheckIn', 'caregiver', 'prefs']) {
         if (users.fields.getByName(f)) users.fields.removeByName(f);
       }
       app.save(users);

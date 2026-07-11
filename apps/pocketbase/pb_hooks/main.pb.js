@@ -395,7 +395,33 @@ routerAdd('GET', '/api/kinly/guardians', (e) => {
       ward: iAmWard ? null : (function () {
         try {
           const w = $app.findRecordById('users', otherId);
-          return { lastCheckIn: w.getString('lastCheckIn') || '', lastSeen: w.getString('lastSeen') || '' };
+          // Medication reminders that look missed (mirrors reminder_sweep).
+          let missedMeds = 0;
+          let medsTotal = 0;
+          if (status === 'active') {
+            try {
+              const staleCut = new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString().replace('T', ' ');
+              const meds = $app.findRecordsByFilter(
+                'reminders',
+                "user = {:u} && kind = 'medication' && enabled = true",
+                '',
+                100,
+                0,
+                { u: otherId }
+              );
+              medsTotal = meds.length;
+              for (const m of meds) {
+                const doneAt = m.getString('lastDoneAt');
+                if (!doneAt || doneAt < staleCut) missedMeds++;
+              }
+            } catch (_) {}
+          }
+          return {
+            lastCheckIn: w.getString('lastCheckIn') || '',
+            lastSeen: w.getString('lastSeen') || '',
+            missedMeds: missedMeds,
+            medsTotal: medsTotal,
+          };
         } catch (_) {
           return null;
         }
@@ -479,6 +505,106 @@ routerAdd('POST', '/api/kinly/ward/reminders/delete', (e) => {
     $app.delete(r);
   } catch (_) {}
   return e.json(200, { ok: true });
+});
+
+/** Set a ward's display prefs (text size / theme). Owner-or-guardian.
+ *  POST /api/kinly/ward/prefs { wardId, textSize?, mode? } */
+routerAdd('POST', '/api/kinly/ward/prefs', (e) => {
+  const auth = e.auth;
+  if (!auth) return e.json(401, { error: 'Please sign in.' });
+  const info = e.requestInfo();
+  const b = info.body || {};
+  const wardId = String(b.wardId || '').trim();
+  if (!wardId || (wardId !== auth.id && !isActiveGuardian(auth.id, wardId))) {
+    return e.json(403, { error: 'Not allowed.' });
+  }
+  const textSize = String(b.textSize || '');
+  const mode = String(b.mode || '');
+  if (textSize && ['normal', 'large', 'xlarge'].indexOf(textSize) === -1) return e.json(400, { error: 'Bad text size.' });
+  if (mode && ['light', 'dark', 'auto'].indexOf(mode) === -1) return e.json(400, { error: 'Bad mode.' });
+
+  let ward;
+  try {
+    ward = $app.findRecordById('users', wardId);
+  } catch (_) {
+    return e.json(404, { error: 'Not found.' });
+  }
+  let prefs = {};
+  try {
+    prefs = JSON.parse(ward.getString('prefs') || '{}');
+  } catch (_) {}
+  if (textSize) prefs.textSize = textSize;
+  if (mode) prefs.mode = mode;
+  prefs.updatedAt = new Date().toISOString();
+  ward.set('prefs', JSON.stringify(prefs));
+  $app.save(ward);
+
+  if (wardId !== auth.id) {
+    pushOne(
+      ward.getString('pushToken'),
+      'Kinly settings updated',
+      (auth.getString('name') || 'Your guardian') + ' adjusted your display settings to help you read more easily.',
+      {}
+    );
+  }
+  return e.json(200, { prefs: prefs });
+});
+
+/** Add a contact for a ward: starts (or reuses) a 1:1 between the ward and the
+ *  person at `handle`. Guardian only. POST /api/kinly/ward/contacts */
+routerAdd('POST', '/api/kinly/ward/contacts', (e) => {
+  const auth = e.auth;
+  if (!auth) return e.json(401, { error: 'Please sign in.' });
+  if (rateLimited(auth.id, 20, 60 * 60 * 1000)) {
+    return e.json(429, { error: 'Too many lookups. Please wait a little while and try again.' });
+  }
+  const info = e.requestInfo();
+  const wardId = String((info.body && info.body.wardId) || '').trim();
+  const handle = String((info.body && info.body.handle) || '').trim();
+  if (!wardId || !isActiveGuardian(auth.id, wardId)) return e.json(403, { error: 'Not allowed.' });
+  if (!handle) return e.json(400, { error: 'Enter a username or phone number.' });
+
+  const other = resolvePerson(handle);
+  if (!other) return e.json(404, { error: 'No one with that username or number has joined Kinly yet.' });
+  if (other.id === wardId) return e.json(400, { error: 'That is already them!' });
+  if (blockedPair(wardId, other.id)) {
+    return e.json(403, { error: 'This conversation is not available.' });
+  }
+
+  // Reuse an existing 1:1 if there is one (same shape as /api/kinly/direct).
+  const existing = $app.findRecordsByFilter(
+    'conversations',
+    'isGroup = false && members.id ?= {:me} && members.id ?= {:other}',
+    '-updated',
+    20,
+    0,
+    { me: wardId, other: other.id },
+  );
+  for (const c of existing) {
+    const ids = c.get('members') || [];
+    if (ids.length === 2) return e.json(200, { id: c.id });
+  }
+
+  const col = $app.findCollectionByNameOrId('conversations');
+  const conv = new Record(col);
+  conv.set('isGroup', false);
+  conv.set('title', '');
+  conv.set('members', [wardId, other.id]);
+  conv.set('createdBy', wardId);
+  $app.save(conv);
+
+  // Tell the ward someone new is in their list (content-free beyond names).
+  try {
+    const ward = $app.findRecordById('users', wardId);
+    pushOne(
+      ward.getString('pushToken'),
+      'New contact added',
+      (auth.getString('name') || 'Your guardian') + ' added ' + (other.getString('name') || 'someone') + ' to your contacts.',
+      { conversationId: conv.id }
+    );
+  } catch (_) {}
+
+  return e.json(200, { id: conv.id });
 });
 
 /** People the caller already knows (for building groups). GET /api/kinly/contacts */

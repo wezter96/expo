@@ -321,9 +321,9 @@ export type Guardian = {
   role: GuardianRole;
   status: 'pending' | 'active';
   needsMyResponse: boolean;
-  person: { id: string; name: string; avatar?: string };
+  person: { id: string; name: string; avatar?: string; phone?: string; username?: string };
   /** Wellbeing of the ward (only present when I am the guardian). */
-  ward?: { lastCheckIn: number; lastSeen: number } | null;
+  ward?: { lastCheckIn: number; lastSeen: number; missedMeds: number; medsTotal: number } | null;
 };
 
 type GuardianDTO = {
@@ -331,8 +331,8 @@ type GuardianDTO = {
   role: GuardianRole;
   status: 'pending' | 'active';
   needsMyResponse: boolean;
-  person: { id: string; name: string; avatar?: string };
-  ward?: { lastCheckIn?: string; lastSeen?: string } | null;
+  person: { id: string; name: string; avatar?: string; phone?: string; username?: string };
+  ward?: { lastCheckIn?: string; lastSeen?: string; missedMeds?: number; medsTotal?: number } | null;
 };
 
 /** My guardianships — people who help me and people I help. */
@@ -345,9 +345,20 @@ export async function fetchGuardians(): Promise<Guardian[]> {
       role: r.role,
       status: r.status,
       needsMyResponse: r.needsMyResponse,
-      person: { id: r.person.id, name: r.person.name, avatar: fileUrl('users', r.person.id, (r.person as { avatar?: string }).avatar ?? '') },
+      person: {
+        id: r.person.id,
+        name: r.person.name,
+        avatar: fileUrl('users', r.person.id, (r.person as { avatar?: string }).avatar ?? ''),
+        phone: r.person.phone || undefined,
+        username: r.person.username || undefined,
+      },
       ward: r.ward
-        ? { lastCheckIn: r.ward.lastCheckIn ? Date.parse(r.ward.lastCheckIn) : 0, lastSeen: r.ward.lastSeen ? Date.parse(r.ward.lastSeen) : 0 }
+        ? {
+            lastCheckIn: r.ward.lastCheckIn ? Date.parse(r.ward.lastCheckIn) : 0,
+            lastSeen: r.ward.lastSeen ? Date.parse(r.ward.lastSeen) : 0,
+            missedMeds: r.ward.missedMeds ?? 0,
+            medsTotal: r.ward.medsTotal ?? 0,
+          }
         : null,
     }));
   } catch {
@@ -437,6 +448,34 @@ export async function deleteWardReminder(wardId: string, id: string): Promise<vo
   } catch {
     // best-effort
   }
+}
+
+export type RemotePrefs = { textSize?: 'normal' | 'large' | 'xlarge'; mode?: 'light' | 'dark' | 'auto'; updatedAt?: string };
+
+/** Set a ward's display prefs (guardian, or yourself). */
+export async function setWardPrefs(wardId: string, prefs: { textSize?: string; mode?: string }): Promise<void> {
+  if (!pb) throw new Error('Not connected to a server.');
+  await pb.send('/api/kinly/ward/prefs', { method: 'POST', body: { wardId, ...prefs } });
+}
+
+/** The signed-in user's own server-synced prefs (refreshed from the server). */
+export async function fetchMyPrefs(): Promise<RemotePrefs | null> {
+  if (!pb || !pb.authStore.record) return null;
+  try {
+    await pb.collection('users').authRefresh();
+    const raw = (pb.authStore.record?.prefs as string) || '';
+    return raw ? (JSON.parse(raw) as RemotePrefs) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Add a contact for a ward by phone/@username (guardian). Returns the
+ *  conversation id. Throws with a friendly message on failure. */
+export async function addWardContact(wardId: string, handle: string): Promise<string> {
+  if (!pb) throw new Error('Not connected to a server.');
+  const res = await pb.send<{ id: string }>('/api/kinly/ward/contacts', { method: 'POST', body: { wardId, handle } });
+  return res.id;
 }
 
 /** Create a group conversation. Returns the conversation id. */
