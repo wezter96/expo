@@ -240,6 +240,33 @@ migrate(
     });
     app.save(reminders);
 
+    // --- guardianships (a trusted helper relationship) ------------------
+    // Links a `ward` (the person being helped) with a `guardian` (the helper).
+    // Requires consent: created 'pending' by either side and becomes 'active'
+    // only when the other party accepts. Mutations go through /api/kinly/
+    // guardian/* routes; rows are readable by the two people involved.
+    const guardianships = new Collection({
+      type: 'base',
+      name: 'guardianships',
+      listRule: '@request.auth.id != "" && (ward.id ?= @request.auth.id || guardian.id ?= @request.auth.id)',
+      viewRule: '@request.auth.id != "" && (ward.id ?= @request.auth.id || guardian.id ?= @request.auth.id)',
+      createRule: null,
+      updateRule: null,
+      deleteRule: null,
+      fields: [
+        { type: 'relation', name: 'ward', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        { type: 'relation', name: 'guardian', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        // 'pending' | 'active'
+        { type: 'text', name: 'status', max: 10 },
+        // which side sent the invite: 'ward' | 'guardian' (the other accepts)
+        { type: 'text', name: 'invitedBy', max: 10 },
+        { type: 'autodate', name: 'created', onCreate: true },
+        { type: 'autodate', name: 'updated', onCreate: true, onUpdate: true },
+      ],
+      indexes: ['CREATE UNIQUE INDEX idx_guardianships_pair ON guardianships (ward, guardian)'],
+    });
+    app.save(guardianships);
+
     // --- calls (ring signaling) -----------------------------------------
     const calls = new Collection({
       type: 'base',
@@ -311,7 +338,7 @@ migrate(
     app.save(conversationKeys);
   },
   (app) => {
-    for (const name of ['reminders', 'conversation_keys', 'reports', 'calls', 'reactions', 'typing', 'reads', 'messages', 'conversations']) {
+    for (const name of ['guardianships', 'reminders', 'conversation_keys', 'reports', 'calls', 'reactions', 'typing', 'reads', 'messages', 'conversations']) {
       try {
         app.delete(app.findCollectionByNameOrId(name));
       } catch (_) {

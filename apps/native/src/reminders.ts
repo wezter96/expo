@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import type { Reminder } from './api/pocketbase';
+import { fetchReminders, type Reminder } from './api/pocketbase';
 
 /**
  * On-device scheduling for reminders. Medication reminders fire daily at a
@@ -85,4 +85,25 @@ export async function scheduleReminder(r: Reminder): Promise<void> {
   const map = await readMap();
   map[r.id] = ids;
   await writeMap(map);
+}
+
+/**
+ * Reconcile local notifications with the server list. Schedules any reminder
+ * this device hasn't scheduled yet (e.g. one a guardian added remotely) and
+ * cancels notifications for reminders that no longer exist. Safe to call on
+ * app start and when the Reminders screen opens.
+ */
+export async function syncReminderSchedules(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  const reminders = await fetchReminders();
+  const map = await readMap();
+  const known = new Set(Object.keys(map));
+  for (const r of reminders) {
+    if (!known.has(r.id)) {
+      if (r.enabled) await scheduleReminder(r);
+    }
+    known.delete(r.id);
+  }
+  // Anything left in `known` is a schedule for a reminder that's gone.
+  for (const staleId of known) await cancelReminder(staleId);
 }

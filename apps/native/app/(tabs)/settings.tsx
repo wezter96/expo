@@ -109,6 +109,13 @@ export default function Settings() {
       onPress: () => router.push('/reminders'),
     },
     {
+      icon: 'people-circle',
+      label: t('guardians.title'),
+      value: t('guardians.settingsValue'),
+      color: colors.accent,
+      onPress: () => router.push('/guardians'),
+    },
+    {
       icon: 'help-circle',
       label: t('settings.help'),
       onPress: () =>

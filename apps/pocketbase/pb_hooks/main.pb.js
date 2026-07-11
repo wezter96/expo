@@ -239,6 +239,248 @@ routerAdd('GET', '/api/kinly/conversations', (e) => {
   );
 });
 
+// ===========================================================================
+// Guardianships — a consent-based "trusted helper" relationship.
+// ===========================================================================
+
+function pushOne(token, title, body, data) {
+  if (!token) return;
+  try {
+    $http.send({
+      url: 'https://exp.host/--/api/v2/push/send',
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify([{ to: token, title: title, body: body, sound: 'default', data: data || {} }]),
+      timeout: 20,
+    });
+  } catch (_) {}
+}
+
+/** Invite/ask to form a guardianship. POST /api/kinly/guardian/request
+ *  { userId, role } — role is the OTHER person's role: 'guardian' (they will
+ *  help me; I am the ward) or 'ward' (I will help them; I am the guardian). */
+routerAdd('POST', '/api/kinly/guardian/request', (e) => {
+  const auth = e.auth;
+  if (!auth) return e.json(401, { error: 'Please sign in.' });
+  const info = e.requestInfo();
+  const otherId = String((info.body && info.body.userId) || '').trim();
+  const role = String((info.body && info.body.role) || '').trim();
+  if (!otherId || (role !== 'guardian' && role !== 'ward')) return e.json(400, { error: 'Missing details.' });
+  if (otherId === auth.id) return e.json(400, { error: 'That is you!' });
+
+  let other;
+  try {
+    other = $app.findRecordById('users', otherId);
+  } catch (_) {
+    return e.json(404, { error: 'That person could not be found.' });
+  }
+  if (blockedPair(auth.id, otherId)) return e.json(403, { error: 'This is not available.' });
+
+  const wardId = role === 'guardian' ? auth.id : otherId;
+  const guardianId = role === 'guardian' ? otherId : auth.id;
+  const invitedBy = role === 'guardian' ? 'ward' : 'guardian';
+
+  // Reuse an existing pair if there is one.
+  try {
+    const existing = $app.findFirstRecordByFilter(
+      'guardianships',
+      'ward = {:w} && guardian = {:g}',
+      { w: wardId, g: guardianId }
+    );
+    return e.json(200, { id: existing.id, status: existing.getString('status') });
+  } catch (_) {}
+
+  const col = $app.findCollectionByNameOrId('guardianships');
+  const g = new Record(col);
+  g.set('ward', wardId);
+  g.set('guardian', guardianId);
+  g.set('status', 'pending');
+  g.set('invitedBy', invitedBy);
+  $app.save(g);
+
+  const meName = other && auth.get('name') ? auth.getString('name') : 'Someone';
+  const body =
+    invitedBy === 'ward'
+      ? meName + ' would like you to be their guardian on Kinly.'
+      : meName + ' offered to help look after you on Kinly.';
+  pushOne(other.getString('pushToken'), 'Guardian request', body, { guardianship: g.id });
+
+  return e.json(200, { id: g.id, status: 'pending' });
+});
+
+/** Accept or decline a pending guardianship. POST /api/kinly/guardian/respond
+ *  { id, accept } — only the party who did NOT send the invite may respond. */
+routerAdd('POST', '/api/kinly/guardian/respond', (e) => {
+  const auth = e.auth;
+  if (!auth) return e.json(401, { error: 'Please sign in.' });
+  const info = e.requestInfo();
+  const id = String((info.body && info.body.id) || '').trim();
+  const accept = !!(info.body && info.body.accept);
+
+  let g;
+  try {
+    g = $app.findRecordById('guardianships', id);
+  } catch (_) {
+    return e.json(404, { error: 'Request not found.' });
+  }
+  if (g.getString('status') !== 'pending') return e.json(400, { error: 'This request is no longer pending.' });
+
+  // The accepting party is whoever did not invite.
+  const mustAccept = g.getString('invitedBy') === 'ward' ? g.getString('guardian') : g.getString('ward');
+  if (auth.id !== mustAccept) return e.json(403, { error: 'This request is not yours to answer.' });
+
+  if (!accept) {
+    $app.delete(g);
+    return e.json(200, { status: 'declined' });
+  }
+  g.set('status', 'active');
+  $app.save(g);
+
+  // Let the inviter know it was accepted.
+  const inviterId = g.getString('invitedBy') === 'ward' ? g.getString('ward') : g.getString('guardian');
+  try {
+    const inviter = $app.findRecordById('users', inviterId);
+    pushOne(inviter.getString('pushToken'), 'Guardian request accepted', (auth.getString('name') || 'They') + ' accepted.', {});
+  } catch (_) {}
+
+  return e.json(200, { status: 'active' });
+});
+
+/** Remove a guardianship (either party). POST /api/kinly/guardian/remove { id } */
+routerAdd('POST', '/api/kinly/guardian/remove', (e) => {
+  const auth = e.auth;
+  if (!auth) return e.json(401, { error: 'Please sign in.' });
+  const info = e.requestInfo();
+  const id = String((info.body && info.body.id) || '').trim();
+  let g;
+  try {
+    g = $app.findRecordById('guardianships', id);
+  } catch (_) {
+    return e.json(200, { ok: true });
+  }
+  if (auth.id !== g.getString('ward') && auth.id !== g.getString('guardian')) {
+    return e.json(403, { error: 'Not allowed.' });
+  }
+  $app.delete(g);
+  return e.json(200, { ok: true });
+});
+
+/** The caller's guardianships, split into who helps me and who I help.
+ *  GET /api/kinly/guardians */
+routerAdd('GET', '/api/kinly/guardians', (e) => {
+  const auth = e.auth;
+  if (!auth) return e.json(401, { error: 'Please sign in.' });
+  const rows = $app.findRecordsByFilter(
+    'guardianships',
+    'ward = {:me} || guardian = {:me}',
+    '-created',
+    500,
+    0,
+    { me: auth.id }
+  );
+  const out = [];
+  for (const g of rows) {
+    const iAmWard = g.getString('ward') === auth.id;
+    const otherId = iAmWard ? g.getString('guardian') : g.getString('ward');
+    const status = g.getString('status');
+    const mustAccept = g.getString('invitedBy') === 'ward' ? g.getString('guardian') : g.getString('ward');
+    out.push({
+      id: g.id,
+      // role of the OTHER person relative to me
+      role: iAmWard ? 'guardian' : 'ward',
+      status: status,
+      needsMyResponse: status === 'pending' && mustAccept === auth.id,
+      person: userBrief(otherId),
+      // wellbeing shown to guardians about their wards
+      ward: iAmWard ? null : (function () {
+        try {
+          const w = $app.findRecordById('users', otherId);
+          return { lastCheckIn: w.getString('lastCheckIn') || '', lastSeen: w.getString('lastSeen') || '' };
+        } catch (_) {
+          return null;
+        }
+      })(),
+    });
+  }
+  return e.json(200, out);
+});
+
+/** True if `callerId` is an active guardian of `wardId`. */
+function isActiveGuardian(callerId, wardId) {
+  try {
+    $app.findFirstRecordByFilter('guardianships', "ward = {:w} && guardian = {:g} && status = 'active'", {
+      w: wardId,
+      g: callerId,
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function reminderJSON(r) {
+  return {
+    id: r.id,
+    kind: r.getString('kind') || 'medication',
+    title: r.getString('title') || '',
+    time: r.getString('time') || '',
+    date: r.getString('date') || '',
+    enabled: r.getBool('enabled'),
+    notifyCaregiver: r.getBool('notifyCaregiver'),
+    lastDoneAt: r.getString('lastDoneAt') || '',
+  };
+}
+
+/** A ward's reminders, for an active guardian. GET /api/kinly/ward/reminders?wardId= */
+routerAdd('GET', '/api/kinly/ward/reminders', (e) => {
+  const auth = e.auth;
+  if (!auth) return e.json(401, { error: 'Please sign in.' });
+  const info = e.requestInfo();
+  const wardId = String((info.query && info.query.wardId) || '').trim();
+  if (!wardId || !isActiveGuardian(auth.id, wardId)) return e.json(403, { error: 'Not allowed.' });
+  const rows = $app.findRecordsByFilter('reminders', 'user = {:u}', 'time', 200, 0, { u: wardId });
+  return e.json(200, rows.map(reminderJSON));
+});
+
+/** Create a reminder on a ward's behalf. POST /api/kinly/ward/reminders */
+routerAdd('POST', '/api/kinly/ward/reminders', (e) => {
+  const auth = e.auth;
+  if (!auth) return e.json(401, { error: 'Please sign in.' });
+  const info = e.requestInfo();
+  const b = info.body || {};
+  const wardId = String(b.wardId || '').trim();
+  if (!wardId || !isActiveGuardian(auth.id, wardId)) return e.json(403, { error: 'Not allowed.' });
+  if (!String(b.title || '').trim()) return e.json(400, { error: 'A name is required.' });
+
+  const col = $app.findCollectionByNameOrId('reminders');
+  const r = new Record(col);
+  r.set('user', wardId);
+  r.set('kind', b.kind === 'appointment' ? 'appointment' : 'medication');
+  r.set('title', String(b.title).trim());
+  r.set('time', String(b.time || ''));
+  r.set('date', String(b.date || ''));
+  r.set('enabled', b.enabled !== false);
+  r.set('notifyCaregiver', !!b.notifyCaregiver);
+  $app.save(r);
+  return e.json(200, reminderJSON(r));
+});
+
+/** Delete a ward's reminder. POST /api/kinly/ward/reminders/delete { wardId, id } */
+routerAdd('POST', '/api/kinly/ward/reminders/delete', (e) => {
+  const auth = e.auth;
+  if (!auth) return e.json(401, { error: 'Please sign in.' });
+  const info = e.requestInfo();
+  const wardId = String((info.body && info.body.wardId) || '').trim();
+  const id = String((info.body && info.body.id) || '').trim();
+  if (!wardId || !isActiveGuardian(auth.id, wardId)) return e.json(403, { error: 'Not allowed.' });
+  try {
+    const r = $app.findRecordById('reminders', id);
+    if (r.getString('user') !== wardId) return e.json(403, { error: 'Not allowed.' });
+    $app.delete(r);
+  } catch (_) {}
+  return e.json(200, { ok: true });
+});
+
 /** People the caller already knows (for building groups). GET /api/kinly/contacts */
 routerAdd('GET', '/api/kinly/contacts', (e) => {
   const auth = e.auth;
@@ -563,35 +805,64 @@ onRecordAfterCreateSuccess((e) => {
 // hide expired messages immediately so they don't linger until the sweep.
 // ===========================================================================
 
-// Family check-in: once an hour, if someone with a caregiver hasn't checked in
-// for ~30h, push their caregiver so a family member can look in on them.
+/** Push-token lookup by user id (''-safe). */
+function tokenFor(userId) {
+  try {
+    return $app.findRecordById('users', userId).getString('pushToken');
+  } catch (_) {
+    return '';
+  }
+}
+
+/** Active guardian user ids for a ward. */
+function activeGuardiansOf(wardId) {
+  try {
+    const rows = $app.findRecordsByFilter('guardianships', "ward = {:w} && status = 'active'", '', 100, 0, { w: wardId });
+    return rows.map((g) => g.getString('guardian'));
+  } catch (_) {
+    return [];
+  }
+}
+
+// Family check-in: once an hour, if someone hasn't checked in for ~30h, push
+// the people looking after them — their legacy caregiver and any active
+// guardians — so a family member can look in on them.
 cronAdd('checkin_sweep', '0 * * * *', () => {
   try {
-    const now = Date.now();
-    const cutoff = new Date(now - 30 * 60 * 60 * 1000).toISOString().replace('T', ' ');
-    // users with a caregiver whose last check-in is stale (or never)
-    const stale = $app.findRecordsByFilter(
-      'users',
-      "caregiver != '' && (lastCheckIn = '' || lastCheckIn < {:t})",
-      '',
-      500,
-      0,
-      { t: cutoff }
-    );
+    const cutoff = new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString().replace('T', ' ');
+    // ward id -> set of recipient user ids
+    const recipients = {};
+    const add = (wardId, rid) => {
+      if (!wardId || !rid || rid === wardId) return;
+      (recipients[wardId] = recipients[wardId] || {})[rid] = true;
+    };
+    const withCg = $app.findRecordsByFilter('users', "caregiver != ''", '', 1000, 0);
+    for (const u of withCg) add(u.id, u.getString('caregiver'));
+    const gs = $app.findRecordsByFilter('guardianships', "status = 'active'", '', 2000, 0);
+    for (const g of gs) add(g.getString('ward'), g.getString('guardian'));
+
     const messages = [];
-    for (const u of stale) {
-      let token = '';
+    for (const wardId in recipients) {
+      let ward;
       try {
-        token = $app.findRecordById('users', u.getString('caregiver')).getString('pushToken');
-      } catch (_) {}
-      if (token) {
-        messages.push({
-          to: token,
-          title: 'Check in on ' + (u.getString('name') || 'your family member'),
-          body: (u.getString('name') || 'They') + " hasn't checked in on Kinly today. A quick call might be nice.",
-          sound: 'default',
-          data: { conversationId: '' },
-        });
+        ward = $app.findRecordById('users', wardId);
+      } catch (_) {
+        continue;
+      }
+      const last = ward.getString('lastCheckIn');
+      if (last && last >= cutoff) continue; // checked in recently
+      const name = ward.getString('name') || 'your family member';
+      for (const rid in recipients[wardId]) {
+        const token = tokenFor(rid);
+        if (token) {
+          messages.push({
+            to: token,
+            title: 'Check in on ' + name,
+            body: (ward.getString('name') || 'They') + " hasn't checked in on Kinly today. A quick call might be nice.",
+            sound: 'default',
+            data: { conversationId: '' },
+          });
+        }
       }
     }
     if (messages.length > 0) {
@@ -633,21 +904,26 @@ cronAdd('reminder_sweep', '0 * * * *', () => {
       } catch (_) {
         continue;
       }
+      // Notify the owner's legacy caregiver and any active guardians.
+      const recipientIds = {};
       const cg = owner.getString('caregiver');
-      if (!cg) continue;
-      let token = '';
-      try {
-        token = $app.findRecordById('users', cg).getString('pushToken');
-      } catch (_) {}
-      if (token) {
-        messages.push({
-          to: token,
-          title: 'Medication reminder',
-          body: (owner.getString('name') || 'Your family member') + ' may have missed: ' + r.getString('title'),
-          sound: 'default',
-          data: {},
-        });
+      if (cg) recipientIds[cg] = true;
+      for (const gid of activeGuardiansOf(owner.id)) recipientIds[gid] = true;
+      let notified = false;
+      for (const rid in recipientIds) {
+        const token = tokenFor(rid);
+        if (token) {
+          notified = true;
+          messages.push({
+            to: token,
+            title: 'Medication reminder',
+            body: (owner.getString('name') || 'Your family member') + ' may have missed: ' + r.getString('title'),
+            sound: 'default',
+            data: {},
+          });
+        }
       }
+      if (!notified) continue;
       r.set('lastAlertedAt', stamp);
       try {
         $app.save(r);

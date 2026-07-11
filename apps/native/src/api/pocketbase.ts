@@ -311,6 +311,134 @@ export async function deleteReminder(id: string): Promise<void> {
   }
 }
 
+// --- guardianships (trusted helpers) ---------------------------------------
+
+/** The other person's role relative to me: they help me ('guardian') or I help
+ *  them ('ward'). */
+export type GuardianRole = 'guardian' | 'ward';
+export type Guardian = {
+  id: string;
+  role: GuardianRole;
+  status: 'pending' | 'active';
+  needsMyResponse: boolean;
+  person: { id: string; name: string; avatar?: string };
+  /** Wellbeing of the ward (only present when I am the guardian). */
+  ward?: { lastCheckIn: number; lastSeen: number } | null;
+};
+
+type GuardianDTO = {
+  id: string;
+  role: GuardianRole;
+  status: 'pending' | 'active';
+  needsMyResponse: boolean;
+  person: { id: string; name: string; avatar?: string };
+  ward?: { lastCheckIn?: string; lastSeen?: string } | null;
+};
+
+/** My guardianships — people who help me and people I help. */
+export async function fetchGuardians(): Promise<Guardian[]> {
+  if (!pb || !pb.authStore.isValid) return [];
+  try {
+    const rows = await pb.send<GuardianDTO[]>('/api/kinly/guardians', { method: 'GET' });
+    return rows.map((r) => ({
+      id: r.id,
+      role: r.role,
+      status: r.status,
+      needsMyResponse: r.needsMyResponse,
+      person: { id: r.person.id, name: r.person.name, avatar: fileUrl('users', r.person.id, (r.person as { avatar?: string }).avatar ?? '') },
+      ward: r.ward
+        ? { lastCheckIn: r.ward.lastCheckIn ? Date.parse(r.ward.lastCheckIn) : 0, lastSeen: r.ward.lastSeen ? Date.parse(r.ward.lastSeen) : 0 }
+        : null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Ask to form a guardianship. `role` is the other person's role: 'guardian'
+ *  (they will help me) or 'ward' (I will help them). */
+export async function requestGuardian(userId: string, role: GuardianRole): Promise<void> {
+  if (!pb) throw new Error('Not connected to a server.');
+  await pb.send('/api/kinly/guardian/request', { method: 'POST', body: { userId, role } });
+}
+
+export async function respondGuardian(id: string, accept: boolean): Promise<void> {
+  if (!pb) throw new Error('Not connected to a server.');
+  await pb.send('/api/kinly/guardian/respond', { method: 'POST', body: { id, accept } });
+}
+
+export async function removeGuardian(id: string): Promise<void> {
+  if (!pb) return;
+  try {
+    await pb.send('/api/kinly/guardian/remove', { method: 'POST', body: { id } });
+  } catch {
+    // best-effort
+  }
+}
+
+type WardReminderDTO = {
+  id: string;
+  kind: ReminderKind;
+  title: string;
+  time: string;
+  date: string;
+  enabled: boolean;
+  notifyCaregiver: boolean;
+  lastDoneAt: string;
+};
+
+function dtoToReminder(r: WardReminderDTO): Reminder {
+  return {
+    id: r.id,
+    kind: r.kind || 'medication',
+    title: r.title,
+    time: r.time,
+    date: r.date || undefined,
+    enabled: r.enabled,
+    notifyCaregiver: r.notifyCaregiver,
+    lastDoneAt: r.lastDoneAt ? Date.parse(r.lastDoneAt) : undefined,
+  };
+}
+
+/** A ward's reminders (guardian view). */
+export async function fetchWardReminders(wardId: string): Promise<Reminder[]> {
+  if (!pb) return [];
+  try {
+    const rows = await pb.send<WardReminderDTO[]>(`/api/kinly/ward/reminders?wardId=${encodeURIComponent(wardId)}`, {
+      method: 'GET',
+    });
+    return rows.map(dtoToReminder);
+  } catch {
+    return [];
+  }
+}
+
+/** Create a reminder for a ward (guardian). */
+export async function createWardReminder(
+  wardId: string,
+  input: Omit<Reminder, 'id' | 'lastDoneAt'>
+): Promise<Reminder | null> {
+  if (!pb) return null;
+  try {
+    const r = await pb.send<WardReminderDTO>('/api/kinly/ward/reminders', {
+      method: 'POST',
+      body: { wardId, ...input, date: input.date ?? '' },
+    });
+    return dtoToReminder(r);
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteWardReminder(wardId: string, id: string): Promise<void> {
+  if (!pb) return;
+  try {
+    await pb.send('/api/kinly/ward/reminders/delete', { method: 'POST', body: { wardId, id } });
+  } catch {
+    // best-effort
+  }
+}
+
 /** Create a group conversation. Returns the conversation id. */
 export async function createGroup(title: string, memberIds: string[]): Promise<string | null> {
   if (!pb || !pb.authStore.record) return null;
