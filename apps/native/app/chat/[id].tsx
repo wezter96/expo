@@ -23,7 +23,9 @@ import {
   currentUserId,
   fetchReactions,
   fetchReads,
+  fetchTyping,
   markConversationRead,
+  pingTyping,
   serverEnabled,
   setReaction,
   startCall,
@@ -31,6 +33,7 @@ import {
   type CallMode,
   type Reaction,
   type Read,
+  type Typing,
 } from '../../src/api/pocketbase';
 import { Avatar } from '../../src/components/Avatar';
 import { clearDraft, loadDraft, saveDraft } from '../../src/drafts';
@@ -45,6 +48,9 @@ import { useTheme } from '../../src/theme-context';
 
 const EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
 const URL_RE = /(https?:\/\/|www\.)\S+/i;
+// A typing row older than this counts as "stopped"; we re-ping every 3s while
+// the user is actively typing so it stays fresh.
+const TYPING_TTL = 6000;
 import { clockTime } from '../../src/time';
 
 export default function Chat() {
@@ -87,7 +93,9 @@ export default function Chat() {
   const [elapsed, setElapsed] = useState(0);
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [reads, setReads] = useState<Read[]>([]);
+  const [typingUsers, setTypingUsers] = useState<Typing[]>([]);
   const [reactingTo, setReactingTo] = useState<string | null>(null);
+  const lastPingRef = useRef(0);
   const listRef = useRef<FlatList<Message>>(null);
   const online = serverEnabled();
   const meId = currentUserId();
@@ -128,6 +136,25 @@ export default function Chat() {
     if (!id || editing) return;
     void saveDraft(id, draft);
   }, [id, draft, editing]);
+
+  // Live "X is typing…" — refresh on any typing event, and locally expire rows
+  // that have gone quiet (no event fires when someone simply stops).
+  useEffect(() => {
+    if (!id || !online) return;
+    let active = true;
+    const reload = () => fetchTyping(id).then((rows) => active && setTypingUsers(rows));
+    reload();
+    let unsub = () => {};
+    subscribeCollection('typing', reload).then((fn) => (active ? (unsub = fn) : fn()));
+    const expiry = setInterval(() => {
+      setTypingUsers((list) => (list.length ? list.filter((tu) => Date.now() - tu.at < TYPING_TTL) : list));
+    }, 2000);
+    return () => {
+      active = false;
+      unsub();
+      clearInterval(expiry);
+    };
+  }, [id, online]);
 
   // Reactions + read receipts (server-backed), refreshed on any change.
   useEffect(() => {
@@ -207,6 +234,17 @@ export default function Chat() {
       </View>
     );
   }
+
+  const onDraftChange = (text: string) => {
+    setDraft(text);
+    if (online && id && !editing && text.trim()) {
+      const now = Date.now();
+      if (now - lastPingRef.current > 3000) {
+        lastPingRef.current = now;
+        void pingTyping(id);
+      }
+    }
+  };
 
   function send() {
     const text = draft.trim();
@@ -444,6 +482,17 @@ export default function Chat() {
 
   const blocked = !!other && online && isBlocked(other.id);
 
+  // "X is typing…" — names of others typing within the freshness window.
+  const typingNames = typingUsers
+    .filter((tu) => Date.now() - tu.at < TYPING_TTL)
+    .map((tu) => (contact.isGroup ? contact.members?.find((m) => m.id === tu.userId)?.name : contact.name))
+    .filter(Boolean) as string[];
+  const typingLabel = !typingNames.length
+    ? ''
+    : typingNames.length === 1
+      ? t('chat.typingOne', { name: typingNames[0] })
+      : t('chat.typingMany');
+
   return (
     <KeyboardAvoidingView
       style={styles.flex}
@@ -652,6 +701,12 @@ export default function Chat() {
         </Pressable>
       </Modal>
 
+      {typingLabel ? (
+        <View style={styles.typingBar}>
+          <Text style={styles.typingText}>{typingLabel}</Text>
+        </View>
+      ) : null}
+
       {blocked ? (
         <View style={[styles.blockedBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
           <Text style={styles.blockedText}>You blocked {contact.name}.</Text>
@@ -718,7 +773,7 @@ export default function Chat() {
               placeholder={t('chat.writeMessage')}
               placeholderTextColor={colors.textMuted}
               value={draft}
-              onChangeText={setDraft}
+              onChangeText={onDraftChange}
               multiline
               returnKeyType="send"
             />
@@ -999,6 +1054,8 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     borderBottomColor: colors.border,
   },
   searchInput: { flex: 1, fontSize: fonts.body, color: colors.text, paddingVertical: 4 },
+  typingBar: { paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
+  typingText: { fontSize: fonts.small, color: colors.textMuted, fontStyle: 'italic' },
   encNote: {
     flexDirection: 'row',
     alignItems: 'center',

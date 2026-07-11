@@ -185,6 +185,26 @@ migrate(
     });
     app.save(reads);
 
+    // --- typing (ephemeral "X is typing…" signal) -----------------------
+    // One row per (conversation, user); the client bumps `updated` while the
+    // person types and treats rows older than a few seconds as "stopped".
+    const typing = new Collection({
+      type: 'base',
+      name: 'typing',
+      listRule: '@request.auth.id != "" && conversation.members.id ?= @request.auth.id',
+      viewRule: '@request.auth.id != "" && conversation.members.id ?= @request.auth.id',
+      createRule: '@request.auth.id != "" && user.id ?= @request.auth.id && conversation.members.id ?= @request.auth.id',
+      updateRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      deleteRule: null,
+      fields: [
+        { type: 'relation', name: 'conversation', required: true, cascadeDelete: true, maxSelect: 1, collectionId: conversations.id },
+        { type: 'relation', name: 'user', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        { type: 'autodate', name: 'updated', onCreate: true, onUpdate: true },
+      ],
+      indexes: ['CREATE UNIQUE INDEX idx_typing_conv_user ON typing (conversation, user)'],
+    });
+    app.save(typing);
+
     // --- calls (ring signaling) -----------------------------------------
     const calls = new Collection({
       type: 'base',
@@ -256,7 +276,7 @@ migrate(
     app.save(conversationKeys);
   },
   (app) => {
-    for (const name of ['conversation_keys', 'reports', 'calls', 'reactions', 'reads', 'messages', 'conversations']) {
+    for (const name of ['conversation_keys', 'reports', 'calls', 'reactions', 'typing', 'reads', 'messages', 'conversations']) {
       try {
         app.delete(app.findCollectionByNameOrId(name));
       } catch (_) {

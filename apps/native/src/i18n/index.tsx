@@ -102,6 +102,8 @@ const en: Record<string, string> = {
   'chat.search': 'Search this chat',
   'chat.searchPlaceholder': 'Search in this conversation',
   'chat.noResults': 'No messages match your search.',
+  'chat.typingOne': '{name} is typing…',
+  'chat.typingMany': 'Several people are typing…',
 
   'saved.title': 'Saved messages',
   'saved.empty': 'No saved messages yet',
@@ -228,6 +230,8 @@ const sv: Record<string, string> = {
   'chat.search': 'Sök i chatten',
   'chat.searchPlaceholder': 'Sök i den här konversationen',
   'chat.noResults': 'Inga meddelanden matchar din sökning.',
+  'chat.typingOne': '{name} skriver…',
+  'chat.typingMany': 'Flera personer skriver…',
 
   'saved.title': 'Sparade meddelanden',
   'saved.empty': 'Inga sparade meddelanden än',

@@ -733,6 +733,45 @@ export async function markConversationRead(conversationId: string): Promise<void
   }
 }
 
+export type Typing = { userId: string; at: number };
+
+/** Who is currently typing in a conversation (raw rows; the caller decides
+ *  how recent counts as "still typing"). Excludes the current user. */
+export async function fetchTyping(conversationId: string): Promise<Typing[]> {
+  if (!pb || !pb.authStore.record) return [];
+  const me = pb.authStore.record.id;
+  try {
+    const rows = await pb.collection('typing').getFullList({
+      filter: pb.filter('conversation = {:c}', { c: conversationId }),
+    });
+    return rows
+      .filter((r) => r.user !== me)
+      .map((r) => ({ userId: r.user as string, at: r.updated ? Date.parse(r.updated as string) : 0 }));
+  } catch {
+    return [];
+  }
+}
+
+/** Signal that the current user is typing in a conversation (upsert, bumps the
+ *  row's updated time). Callers should throttle this. */
+export async function pingTyping(conversationId: string): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  const me = pb.authStore.record.id;
+  try {
+    const existing = await pb
+      .collection('typing')
+      .getFirstListItem(pb.filter('conversation = {:c} && user = {:u}', { c: conversationId, u: me }));
+    // A no-op field write still bumps the autodate `updated` column.
+    await pb.collection('typing').update(existing.id, { user: me });
+  } catch {
+    try {
+      await pb.collection('typing').create({ conversation: conversationId, user: me });
+    } catch {
+      // best-effort
+    }
+  }
+}
+
 /** Subscribe to a collection's changes (reactions / reads), calling back on any event. */
 export async function subscribeCollection(collection: string, onChange: () => void): Promise<() => void> {
   if (!pb || !pb.authStore.isValid || typeof globalThis.EventSource === 'undefined') return () => {};
