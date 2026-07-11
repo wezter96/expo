@@ -26,6 +26,7 @@ const STORAGE_KEY = 'kinly.state.v1';
 const READS_KEY = 'kinly.reads.v1';
 const SOS_KEY = 'kinly.sos.v1';
 const FAV_KEY = 'kinly.favorites.v1';
+const SAVED_KEY = 'kinly.saved.v1';
 
 type State = {
   contacts: Contact[];
@@ -64,6 +65,10 @@ type Store = {
   /** Pinned favorites (shown first). */
   isFavorite: (contactId: string) => boolean;
   toggleFavorite: (contactId: string) => void;
+  /** Saved (starred) messages, kept locally on this device. */
+  isSaved: (messageId: string) => boolean;
+  toggleSaved: (messageId: string) => void;
+  savedMessages: () => Message[];
   /** Safety: block / unblock / report a person (by their user id). */
   isBlocked: (userId: string) => boolean;
   blockContact: (userId: string) => Promise<void>;
@@ -137,6 +142,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setFavorites((f) => {
       const next = f.includes(contactId) ? f.filter((x) => x !== contactId) : [...f, contactId];
       AsyncStorage.setItem(FAV_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  // Saved (starred) messages — ids only, kept on this device.
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+  useEffect(() => {
+    AsyncStorage.getItem(SAVED_KEY)
+      .then((v) => v && setSavedIds(JSON.parse(v)))
+      .catch(() => {});
+  }, []);
+  const isSaved = useCallback((messageId: string) => savedIds.includes(messageId), [savedIds]);
+  const toggleSaved = useCallback((messageId: string) => {
+    setSavedIds((s) => {
+      const next = s.includes(messageId) ? s.filter((x) => x !== messageId) : [...s, messageId];
+      AsyncStorage.setItem(SAVED_KEY, JSON.stringify(next)).catch(() => {});
       return next;
     });
   }, []);
@@ -258,6 +279,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         .sort((a, b) => a.at - b.at);
     },
     [state.messages, state.contacts]
+  );
+
+  const savedMessages = useCallback(
+    () =>
+      state.messages
+        .filter((m) => savedIds.includes(m.id))
+        .sort((a, b) => b.at - a.at),
+    [state.messages, savedIds]
   );
 
   const disappearTimerFor = useCallback(
@@ -495,6 +524,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setEmergency,
     isFavorite,
     toggleFavorite,
+    isSaved,
+    toggleSaved,
+    savedMessages,
     isBlocked,
     blockContact,
     unblockContact,

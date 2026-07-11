@@ -33,6 +33,7 @@ import {
   type Read,
 } from '../../src/api/pocketbase';
 import { Avatar } from '../../src/components/Avatar';
+import { clearDraft, loadDraft, saveDraft } from '../../src/drafts';
 import { decryptRemoteToLocal } from '../../src/e2ee';
 import { useTranslation } from '../../src/i18n';
 import { useStore } from '../../src/store';
@@ -52,6 +53,7 @@ export default function Chat() {
   const insets = useSafeAreaInsets();
   const {
     getContact,
+    conversations,
     messagesFor,
     sendMessage,
     editMessage,
@@ -70,8 +72,13 @@ export default function Chat() {
     setDisappearing,
     pinnedMessageFor,
     setPinned,
+    isSaved,
+    toggleSaved,
   } = useStore();
   const [draft, setDraft] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const [forwarding, setForwarding] = useState<Message | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
@@ -99,6 +106,28 @@ export default function Chat() {
     const idx = pinnedMsg ? messages.findIndex((m) => m.id === pinnedMsg.id) : -1;
     if (idx >= 0) listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.3 });
   };
+
+  // In-conversation search: when active with a query, show only matching text.
+  const q = query.trim().toLowerCase();
+  const visibleMessages = searching && q ? messages.filter((m) => (m.text || '').toLowerCase().includes(q)) : messages;
+
+  // Restore a saved draft when opening the chat.
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    loadDraft(id).then((d) => {
+      if (active && d) setDraft(d);
+    });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  // Persist the composing draft (but not the text of a message being edited).
+  useEffect(() => {
+    if (!id || editing) return;
+    void saveDraft(id, draft);
+  }, [id, draft, editing]);
 
   // Reactions + read receipts (server-backed), refreshed on any change.
   useEffect(() => {
@@ -190,6 +219,7 @@ export default function Chat() {
       setReplyingTo(null);
     }
     setDraft('');
+    if (id) void clearDraft(id);
   }
 
   function startReply(m: Message) {
@@ -287,10 +317,25 @@ export default function Chat() {
     };
   };
 
+  const saveAction = (m: Message) => ({
+    text: isSaved(m.id) ? t('chat.unsave') : t('chat.save'),
+    onPress: () => toggleSaved(m.id),
+  });
+
+  const doForward = (targetId: string) => {
+    const m = forwarding;
+    setForwarding(null);
+    if (!m) return;
+    sendMessage(targetId, m.text);
+    if (targetId !== contact!.id) router.replace(`/chat/${targetId}`);
+  };
+
   function mineActions(m: Message) {
     const opts: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [];
     if (m.kind === 'text') opts.push({ text: 'Edit', onPress: () => startEdit(m) });
     opts.push({ text: 'Reply', onPress: () => startReply(m) });
+    if (m.kind === 'text') opts.push({ text: t('chat.forward'), onPress: () => setForwarding(m) });
+    opts.push(saveAction(m));
     if (online) opts.push(pinAction(m));
     opts.push({ text: 'Delete', style: 'destructive', onPress: () => promptDelete(m.id) });
     opts.push({ text: 'Cancel', style: 'cancel' });
@@ -300,6 +345,8 @@ export default function Chat() {
   function theirActions(m: Message, spoken: string) {
     const opts: { text: string; style?: 'cancel'; onPress?: () => void }[] = [{ text: 'Reply', onPress: () => startReply(m) }];
     if (online) opts.push({ text: 'React', onPress: () => setReactingTo(m.id) });
+    if (m.kind === 'text') opts.push({ text: t('chat.forward'), onPress: () => setForwarding(m) });
+    opts.push(saveAction(m));
     if (online) opts.push(pinAction(m));
     opts.push({ text: 'Read aloud', onPress: () => speak(spoken) });
     opts.push({ text: 'Cancel', style: 'cancel' });
@@ -417,6 +464,14 @@ export default function Chat() {
             <View style={styles.headerActions}>
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel={t('chat.search')}
+                onPress={() => setSearching((s) => !s)}
+                hitSlop={12}
+              >
+                <Ionicons name="search" size={24} color={colors.textOnDark} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
                 accessibilityLabel={`Voice call ${contact.name}`}
                 onPress={() => beginCall('voice')}
                 hitSlop={12}
@@ -439,6 +494,31 @@ export default function Chat() {
         }}
       />
 
+      {searching ? (
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={20} color={colors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('chat.searchPlaceholder')}
+            placeholderTextColor={colors.textMuted}
+            value={query}
+            onChangeText={setQuery}
+            autoFocus
+            returnKeyType="search"
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.done')}
+            onPress={() => {
+              setSearching(false);
+              setQuery('');
+            }}
+            hitSlop={10}
+          >
+            <Ionicons name="close-circle" size={24} color={colors.textMuted} />
+          </Pressable>
+        </View>
+      ) : null}
       {encrypted ? (
         <View style={styles.encNote}>
           <Ionicons name="lock-closed" size={16} color={colors.accent} />
@@ -471,14 +551,14 @@ export default function Chat() {
 
       <FlatList
         ref={listRef}
-        data={messages}
+        data={visibleMessages}
         keyExtractor={(m) => m.id}
         onScrollToIndexFailed={() => {}}
         contentContainerStyle={styles.listContent}
         renderItem={({ item, index }) => {
           // Group consecutive messages from the same person: only the first of
           // a run shows the avatar + name, so the thread stays uncluttered.
-          const prev = index > 0 ? messages[index - 1] : undefined;
+          const prev = index > 0 ? visibleMessages[index - 1] : undefined;
           const groupIncoming = contact.isGroup && !item.mine;
           const firstInRun = !prev || prev.authorId !== item.authorId || prev.mine !== item.mine;
           const sender = groupIncoming ? contact.members?.find((m) => m.id === item.authorId) : undefined;
@@ -507,7 +587,11 @@ export default function Chat() {
           );
         }}
         ListEmptyComponent={
-          <Text style={styles.empty}>Say hello! Type a message below to start.</Text>
+          searching && q ? (
+            <Text style={styles.empty}>{t('chat.noResults')}</Text>
+          ) : (
+            <Text style={styles.empty}>Say hello! Type a message below to start.</Text>
+          )
         }
         ListFooterComponent={seenLabel ? <Text style={styles.seen}>{seenLabel}</Text> : null}
       />
@@ -527,6 +611,30 @@ export default function Chat() {
               </Pressable>
             ))}
           </View>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={!!forwarding} transparent animationType="slide" onRequestClose={() => setForwarding(null)}>
+        <Pressable style={styles.pickerBackdrop} onPress={() => setForwarding(null)}>
+          <Pressable style={styles.forwardCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.forwardTitle}>{t('chat.forwardTo')}</Text>
+            <FlatList
+              data={conversations}
+              keyExtractor={(c) => c.contact.id}
+              style={styles.forwardList}
+              renderItem={({ item }) => (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={item.contact.name}
+                  onPress={() => doForward(item.contact.id)}
+                  style={({ pressed }) => [styles.forwardRow, pressed && styles.pressed]}
+                >
+                  <Avatar name={item.contact.name} isGroup={item.contact.isGroup} uri={item.contact.avatar} size={44} />
+                  <Text style={styles.forwardName} numberOfLines={1}>{item.contact.name}</Text>
+                </Pressable>
+              )}
+            />
+          </Pressable>
         </Pressable>
       </Modal>
 
@@ -880,6 +988,17 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   pinnedTextWrap: { flex: 1 },
   pinnedLabel: { fontSize: fonts.small - 2, color: colors.primary, fontWeight: '800' },
   pinnedText: { fontSize: fonts.small, color: colors.text, fontWeight: '600' },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.card,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: fonts.body, color: colors.text, paddingVertical: 4 },
   encNote: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -917,6 +1036,19 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   },
   pickerEmojiWrap: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   pickerEmoji: { fontSize: 34 },
+  forwardCard: {
+    width: '86%',
+    maxHeight: '70%',
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  forwardTitle: { fontSize: fonts.title, fontWeight: '800', color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
+  forwardList: { flexGrow: 0 },
+  forwardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
+  forwardName: { flex: 1, fontSize: fonts.body, fontWeight: '700', color: colors.text },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   missing: { fontSize: fonts.body, color: colors.textMuted, textAlign: 'center' },
   listContent: { padding: spacing.md, gap: spacing.sm, flexGrow: 1 },

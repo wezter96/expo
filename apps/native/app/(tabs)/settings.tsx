@@ -61,6 +61,11 @@ export default function Settings() {
       onPress: () => router.push('/display'),
     },
     {
+      icon: 'bookmark',
+      label: t('saved.title'),
+      onPress: () => router.push('/saved'),
+    },
+    {
       icon: lockEnabled ? 'lock-closed' : 'lock-open',
       label: t('settings.appLock'),
       value: !lockAvailable
