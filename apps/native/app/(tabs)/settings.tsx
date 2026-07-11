@@ -102,6 +102,13 @@ export default function Settings() {
       onPress: () => router.push('/checkin'),
     },
     {
+      icon: 'alarm',
+      label: t('reminders.title'),
+      value: t('reminders.settingsValue'),
+      color: colors.primary,
+      onPress: () => router.push('/reminders'),
+    },
+    {
       icon: 'help-circle',
       label: t('settings.help'),
       onPress: () =>

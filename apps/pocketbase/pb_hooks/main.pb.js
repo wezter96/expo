@@ -608,6 +608,65 @@ cronAdd('checkin_sweep', '0 * * * *', () => {
   }
 });
 
+// Medication safety net: once an hour, if a daily medication reminder that
+// opted into caregiver alerts hasn't been acknowledged for over a day, push
+// the caregiver. lastAlertedAt throttles this to at most ~once/20h per item.
+cronAdd('reminder_sweep', '0 * * * *', () => {
+  try {
+    const now = Date.now();
+    const staleCut = new Date(now - 26 * 60 * 60 * 1000).toISOString().replace('T', ' ');
+    const alertCut = new Date(now - 20 * 60 * 60 * 1000).toISOString().replace('T', ' ');
+    const due = $app.findRecordsByFilter(
+      'reminders',
+      "kind = 'medication' && enabled = true && notifyCaregiver = true && (lastDoneAt = '' || lastDoneAt < {:s}) && (lastAlertedAt = '' || lastAlertedAt < {:a})",
+      '',
+      500,
+      0,
+      { s: staleCut, a: alertCut }
+    );
+    const messages = [];
+    const stamp = new Date().toISOString().replace('T', ' ');
+    for (const r of due) {
+      let owner;
+      try {
+        owner = $app.findRecordById('users', r.getString('user'));
+      } catch (_) {
+        continue;
+      }
+      const cg = owner.getString('caregiver');
+      if (!cg) continue;
+      let token = '';
+      try {
+        token = $app.findRecordById('users', cg).getString('pushToken');
+      } catch (_) {}
+      if (token) {
+        messages.push({
+          to: token,
+          title: 'Medication reminder',
+          body: (owner.getString('name') || 'Your family member') + ' may have missed: ' + r.getString('title'),
+          sound: 'default',
+          data: {},
+        });
+      }
+      r.set('lastAlertedAt', stamp);
+      try {
+        $app.save(r);
+      } catch (_) {}
+    }
+    if (messages.length > 0) {
+      $http.send({
+        url: 'https://exp.host/--/api/v2/push/send',
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify(messages),
+        timeout: 20,
+      });
+    }
+  } catch (err) {
+    $app.logger().error('reminder sweep failed', 'error', String(err));
+  }
+});
+
 cronAdd('disappearing_sweep', '*/15 * * * *', () => {
   try {
     const convs = $app.findRecordsByFilter('conversations', 'disappearTimer > 0', '', 1000, 0);

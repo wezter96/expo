@@ -230,6 +230,87 @@ export function lastCheckInAt(): number {
   return v ? Date.parse(v) : 0;
 }
 
+// --- reminders (medication & appointments) ---------------------------------
+
+export type ReminderKind = 'medication' | 'appointment';
+export type Reminder = {
+  id: string;
+  kind: ReminderKind;
+  title: string;
+  /** Local time-of-day, "HH:MM". */
+  time: string;
+  /** "YYYY-MM-DD" for appointments; empty for daily medication. */
+  date?: string;
+  enabled: boolean;
+  notifyCaregiver: boolean;
+  lastDoneAt?: number;
+};
+
+function toReminder(r: RecordModel): Reminder {
+  return {
+    id: r.id,
+    kind: ((r.kind as string) || 'medication') as ReminderKind,
+    title: (r.title as string) || '',
+    time: (r.time as string) || '',
+    date: (r.date as string) || undefined,
+    enabled: !!r.enabled,
+    notifyCaregiver: !!r.notifyCaregiver,
+    lastDoneAt: r.lastDoneAt ? Date.parse(r.lastDoneAt as string) : undefined,
+  };
+}
+
+/** The current user's reminders, soonest time first. */
+export async function fetchReminders(): Promise<Reminder[]> {
+  if (!pb || !pb.authStore.record) return [];
+  try {
+    const rows = await pb.collection('reminders').getFullList({
+      filter: pb.filter('user = {:u}', { u: pb.authStore.record.id }),
+      sort: 'time',
+    });
+    return rows.map(toReminder);
+  } catch {
+    return [];
+  }
+}
+
+/** Create a reminder and return it (with its server id). */
+export async function createReminder(input: Omit<Reminder, 'id' | 'lastDoneAt'>): Promise<Reminder | null> {
+  if (!pb || !pb.authStore.record) return null;
+  try {
+    const rec = await pb.collection('reminders').create({
+      user: pb.authStore.record.id,
+      kind: input.kind,
+      title: input.title,
+      time: input.time,
+      date: input.date ?? '',
+      enabled: input.enabled,
+      notifyCaregiver: input.notifyCaregiver,
+    });
+    return toReminder(rec);
+  } catch {
+    return null;
+  }
+}
+
+/** Mark a reminder acknowledged now ("taken" / "done"). */
+export async function markReminderDone(id: string): Promise<void> {
+  if (!pb) return;
+  try {
+    await pb.collection('reminders').update(id, { lastDoneAt: new Date().toISOString() });
+  } catch {
+    // best-effort
+  }
+}
+
+export async function deleteReminder(id: string): Promise<void> {
+  if (!pb) return;
+  try {
+    await pb.collection('reminders').delete(id);
+  } catch {
+    // best-effort
+  }
+}
+
 /** Create a group conversation. Returns the conversation id. */
 export async function createGroup(title: string, memberIds: string[]): Promise<string | null> {
   if (!pb || !pb.authStore.record) return null;

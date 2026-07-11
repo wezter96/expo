@@ -205,6 +205,41 @@ migrate(
     });
     app.save(typing);
 
+    // --- reminders (medication & appointment) ---------------------------
+    // Private to the owner. Local notifications fire on the device; the
+    // server copy lets a caregiver be alerted if a daily medication reminder
+    // goes un-acknowledged (see the reminder_sweep cron).
+    const reminders = new Collection({
+      type: 'base',
+      name: 'reminders',
+      listRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      viewRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      createRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      updateRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      deleteRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      fields: [
+        { type: 'relation', name: 'user', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        // "medication" (repeats daily) | "appointment" (one-time on `date`)
+        { type: 'text', name: 'kind', max: 20 },
+        { type: 'text', name: 'title', required: true, max: 120 },
+        // Local time-of-day, "HH:MM".
+        { type: 'text', name: 'time', max: 5 },
+        // "YYYY-MM-DD" for appointments (empty for daily medication).
+        { type: 'text', name: 'date', max: 10 },
+        { type: 'bool', name: 'enabled' },
+        // Alert the owner's caregiver if a medication reminder is missed.
+        { type: 'bool', name: 'notifyCaregiver' },
+        // When the owner last acknowledged ("taken" / "done").
+        { type: 'date', name: 'lastDoneAt' },
+        // When we last pushed the caregiver about this reminder (anti-spam).
+        { type: 'date', name: 'lastAlertedAt' },
+        { type: 'autodate', name: 'created', onCreate: true },
+        { type: 'autodate', name: 'updated', onCreate: true, onUpdate: true },
+      ],
+      indexes: ['CREATE INDEX idx_reminders_user ON reminders (user)'],
+    });
+    app.save(reminders);
+
     // --- calls (ring signaling) -----------------------------------------
     const calls = new Collection({
       type: 'base',
@@ -276,7 +311,7 @@ migrate(
     app.save(conversationKeys);
   },
   (app) => {
-    for (const name of ['conversation_keys', 'reports', 'calls', 'reactions', 'typing', 'reads', 'messages', 'conversations']) {
+    for (const name of ['reminders', 'conversation_keys', 'reports', 'calls', 'reactions', 'typing', 'reads', 'messages', 'conversations']) {
       try {
         app.delete(app.findCollectionByNameOrId(name));
       } catch (_) {
