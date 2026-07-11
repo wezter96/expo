@@ -1124,6 +1124,37 @@ cronAdd('reminder_sweep', '0 * * * *', () => {
   }
 });
 
+// Scheduled messages: every minute, move due rows into `messages` (which
+// also fires the normal push-notification hook) and delete them.
+cronAdd('scheduled_send', '* * * * *', () => {
+  try {
+    const now = new Date().toISOString().replace('T', ' ');
+    const due = $app.findRecordsByFilter('scheduled_messages', 'sendAt <= {:t}', 'sendAt', 200, 0, { t: now });
+    if (!due.length) return;
+    const msgCol = $app.findCollectionByNameOrId('messages');
+    for (const s of due) {
+      try {
+        const m = new Record(msgCol);
+        m.set('conversation', s.getString('conversation'));
+        m.set('author', s.getString('user'));
+        m.set('kind', 'text');
+        m.set('text', s.getString('text'));
+        m.set('enc', s.getBool('enc'));
+        m.set('cipher', s.getString('cipher'));
+        m.set('keyEpoch', s.getInt('keyEpoch'));
+        $app.save(m);
+      } catch (err) {
+        $app.logger().error('scheduled send failed', 'error', String(err));
+      }
+      try {
+        $app.delete(s);
+      } catch (_) {}
+    }
+  } catch (err) {
+    $app.logger().error('scheduled sweep failed', 'error', String(err));
+  }
+});
+
 cronAdd('disappearing_sweep', '*/15 * * * *', () => {
   try {
     const convs = $app.findRecordsByFilter('conversations', 'disappearTimer > 0', '', 1000, 0);

@@ -26,6 +26,7 @@ import {
   fetchTyping,
   markConversationRead,
   pingTyping,
+  scheduleMessage,
   serverEnabled,
   setReaction,
   startCall,
@@ -362,6 +363,34 @@ export default function Chat() {
     }
   }
 
+  // "Send later": long-press the send button, pick an elderly-friendly preset.
+  function sendLater() {
+    const text = draft.trim();
+    if (!text || !online || editing) return;
+    const now = new Date();
+    const inOneHour = new Date(now.getTime() + 3600_000);
+    const evening = new Date(now);
+    evening.setHours(18, 0, 0, 0);
+    if (evening <= now) evening.setDate(evening.getDate() + 1);
+    const morning = new Date(now);
+    morning.setDate(morning.getDate() + 1);
+    morning.setHours(8, 0, 0, 0);
+    const schedule = async (at: Date) => {
+      const ok = await scheduleMessage(contact!.id, text, at);
+      if (!ok) return;
+      setDraft('');
+      setReplyingTo(null);
+      if (id) void clearDraft(id);
+      Alert.alert(t('chat.sendLater'), t('chat.scheduledFor', { time: at.toLocaleString() }));
+    };
+    Alert.alert(t('chat.sendLater'), undefined, [
+      { text: t('chat.inOneHour'), onPress: () => void schedule(inOneHour) },
+      { text: t('chat.thisEvening'), onPress: () => void schedule(evening) },
+      { text: t('chat.tomorrowMorning'), onPress: () => void schedule(morning) },
+      { text: t('common.cancel'), style: 'cancel' },
+    ]);
+  }
+
   // Delivery state for a message I sent: seen (someone read past it),
   // delivered (a recipient has been online since), or just sent.
   const tickFor = (m: Message): 'sent' | 'delivered' | 'seen' => {
@@ -510,6 +539,7 @@ export default function Chat() {
     const opts: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [
       { text: fav ? 'Remove from favorites' : 'Add to favorites', onPress: () => toggleFavorite(contact!.id) },
       { text: t('chat.photos'), onPress: () => router.push(`/album/${contact!.id}`) },
+      ...(online ? [{ text: t('scheduled.title'), onPress: () => router.push('/scheduled') }] : []),
       {
         text: `Disappearing messages: ${disappearingLabel(timer)}`,
         onPress: disappearingMenu,
@@ -844,7 +874,10 @@ export default function Chat() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Send message"
+                accessibilityHint={online ? t('chat.sendLaterHint') : undefined}
                 onPress={send}
+                onLongPress={online && !editing ? sendLater : undefined}
+                delayLongPress={350}
                 style={({ pressed }) => [styles.sendBtn, pressed && styles.pressed]}
               >
                 <Ionicons name="send" size={30} color={colors.textOnDark} />

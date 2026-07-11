@@ -719,6 +719,79 @@ export async function pushMessage(id: string, contactId: string, text: string, r
   }
 }
 
+// --- scheduled messages ("send later") --------------------------------------
+
+export type ScheduledMessage = { id: string; contactId: string; text: string; sendAt: number };
+
+/** Schedule a text to send later. Encrypted conversations are sealed NOW with
+ *  the conversation key, so the server never holds the plaintext. */
+export async function scheduleMessage(contactId: string, text: string, sendAt: Date): Promise<boolean> {
+  if (!pb || !pb.authStore.record) return false;
+  try {
+    const base: Record<string, unknown> = {
+      user: pb.authStore.record.id,
+      conversation: contactId,
+      sendAt: sendAt.toISOString(),
+    };
+    const ck = await ensureConvKey(contactId);
+    if (ck) {
+      await pb.collection('scheduled_messages').create({
+        ...base,
+        enc: true,
+        text: '',
+        keyEpoch: ck.epoch,
+        cipher: e2ee.sealPayload(ck.key, { t: text.trim() }),
+      });
+    } else {
+      await pb.collection('scheduled_messages').create({ ...base, text: text.trim() });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** My pending scheduled messages (decrypted locally for display). */
+export async function fetchScheduled(): Promise<ScheduledMessage[]> {
+  if (!pb || !pb.authStore.record) return [];
+  try {
+    const rows = await pb.collection('scheduled_messages').getFullList({
+      filter: pb.filter('user = {:u}', { u: pb.authStore.record.id }),
+      sort: 'sendAt',
+    });
+    const out: ScheduledMessage[] = [];
+    for (const r of rows) {
+      let text = (r.text as string) || '';
+      if (r.enc && r.cipher) {
+        try {
+          const ck = await ensureConvKey(r.conversation as string);
+          if (ck) text = (e2ee.openPayload(ck.key, r.cipher as string).t as string) || '';
+        } catch {
+          text = '🔒';
+        }
+      }
+      out.push({
+        id: r.id,
+        contactId: r.conversation as string,
+        text,
+        sendAt: r.sendAt ? Date.parse(r.sendAt as string) : 0,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export async function cancelScheduled(id: string): Promise<void> {
+  if (!pb) return;
+  try {
+    await pb.collection('scheduled_messages').delete(id);
+  } catch {
+    // best-effort
+  }
+}
+
 /** Edit one of my own text messages. Re-seals when encrypted. */
 export async function editMessage(messageId: string, contactId: string, text: string): Promise<boolean> {
   if (!pb || !pb.authStore.record) return false;

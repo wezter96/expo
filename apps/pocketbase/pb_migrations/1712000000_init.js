@@ -282,6 +282,34 @@ migrate(
     });
     app.save(guardianships);
 
+    // --- scheduled_messages (send later) ---------------------------------
+    // Private to the author until they fire. Encrypted conversations store
+    // the ciphertext (sealed on the device at scheduling time with the
+    // conversation key) — the server never sees the text. A minute cron
+    // moves due rows into `messages` and deletes them.
+    const scheduledMessages = new Collection({
+      type: 'base',
+      name: 'scheduled_messages',
+      listRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      viewRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      createRule:
+        '@request.auth.id != "" && user.id ?= @request.auth.id && conversation.members.id ?= @request.auth.id',
+      updateRule: null,
+      deleteRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      fields: [
+        { type: 'relation', name: 'user', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        { type: 'relation', name: 'conversation', required: true, cascadeDelete: true, maxSelect: 1, collectionId: conversations.id },
+        { type: 'text', name: 'text', max: 4000 },
+        { type: 'bool', name: 'enc' },
+        { type: 'text', name: 'cipher', max: 30000 },
+        { type: 'number', name: 'keyEpoch', min: 0 },
+        { type: 'date', name: 'sendAt', required: true },
+        { type: 'autodate', name: 'created', onCreate: true },
+      ],
+      indexes: ['CREATE INDEX idx_scheduled_due ON scheduled_messages (sendAt)'],
+    });
+    app.save(scheduledMessages);
+
     // --- calls (ring signaling) -----------------------------------------
     const calls = new Collection({
       type: 'base',
@@ -353,7 +381,7 @@ migrate(
     app.save(conversationKeys);
   },
   (app) => {
-    for (const name of ['guardianships', 'reminders', 'conversation_keys', 'reports', 'calls', 'reactions', 'typing', 'reads', 'messages', 'conversations']) {
+    for (const name of ['scheduled_messages', 'guardianships', 'reminders', 'conversation_keys', 'reports', 'calls', 'reactions', 'typing', 'reads', 'messages', 'conversations']) {
       try {
         app.delete(app.findCollectionByNameOrId(name));
       } catch (_) {

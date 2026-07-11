@@ -64,6 +64,7 @@ function Gate() {
         <Stack.Screen name="chat/[id]" options={{ title: 'Chat' }} />
         <Stack.Screen name="album/[id]" options={{ title: 'Photos' }} />
         <Stack.Screen name="saved" options={{ title: 'Saved messages' }} />
+        <Stack.Screen name="scheduled" options={{ title: 'Scheduled messages' }} />
         <Stack.Screen name="reminders" options={{ title: 'Reminders', presentation: 'modal' }} />
         <Stack.Screen name="guardians" options={{ title: 'Family help', presentation: 'modal' }} />
         <Stack.Screen name="dashboard" options={{ title: 'Family dashboard' }} />
