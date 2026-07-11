@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type LangPref, useTranslation } from '../src/i18n';
+import { useStore } from '../src/store';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../src/theme';
 import { type ThemeMode, useTheme } from '../src/theme-context';
 import { type TextSize } from '../src/theme';
@@ -29,6 +30,7 @@ export default function Display() {
   const insets = useSafeAreaInsets();
   const { colors, fonts, mode, setMode, textSize, setTextSize } = useTheme();
   const { t, pref, setPref } = useTranslation();
+  const { simpleMode, setSimpleMode } = useStore();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   return (
@@ -76,6 +78,18 @@ export default function Display() {
         ))}
       </View>
 
+      <Text style={styles.label}>{t('display.simpleMode')}</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <Ionicons name="grid" size={26} color={colors.primary} />
+          <View style={styles.rowGrow}>
+            <Text style={styles.rowLabel}>{t('display.simpleMode')}</Text>
+            <Text style={styles.rowHint}>{t('display.simpleModeHint')}</Text>
+          </View>
+          <Switch value={simpleMode} onValueChange={setSimpleMode} />
+        </View>
+      </View>
+
       <Text style={styles.label}>{t('display.language')}</Text>
       <View style={styles.card}>
         {LANGS.map((l, i) => (
@@ -108,6 +122,8 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     row: { minHeight: TAP_TARGET + 4, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md },
     divider: { borderTopWidth: 2, borderTopColor: colors.border },
     rowLabel: { flex: 1, fontSize: fonts.body, fontWeight: '700', color: colors.text },
+    rowGrow: { flex: 1 },
+    rowHint: { fontSize: fonts.small, color: colors.textMuted, marginTop: 2 },
     big: { fontSize: fonts.body + 6 },
     bigger: { fontSize: fonts.body + 12 },
     hint: { fontSize: fonts.small, color: colors.textMuted, marginTop: spacing.md, textAlign: 'center' },

@@ -14,13 +14,23 @@ import { relativeTime } from '../../src/time';
 export default function Messages() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { conversations, ready, unreadCount, emergencyId, getContact, sendMessage, isFavorite, toggleFavorite } =
+  const { conversations, ready, unreadCount, emergencyId, getContact, sendMessage, isFavorite, toggleFavorite, simpleMode } =
     useStore();
   const { colors, fonts } = useTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [query, setQuery] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const q = query.trim().toLowerCase();
+  const simple = simpleMode && !showAll && conversations.length > 0;
+
+  // Simple mode shows favorites as big tiles (most recent chats if none yet).
+  const tiles = simple
+    ? (() => {
+        const favs = conversations.filter((c) => isFavorite(c.contact.id));
+        return (favs.length ? favs : conversations).slice(0, 6);
+      })()
+    : [];
 
   // Search across people (name/relation) and message text.
   const peopleHits = q
@@ -88,6 +98,7 @@ export default function Messages() {
         </Pressable>
       ) : null}
 
+      {!simple ? (
       <View style={styles.searchBar}>
         <Ionicons name="search" size={22} color={colors.textMuted} />
         <TextInput
@@ -106,8 +117,55 @@ export default function Messages() {
           </Pressable>
         ) : null}
       </View>
+      ) : null}
 
-      {q ? (
+      {simpleMode && showAll ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setShowAll(false)}
+          style={({ pressed }) => [styles.showAllBtn, pressed && styles.pressed]}
+        >
+          <Ionicons name="grid" size={22} color={colors.primary} />
+          <Text style={styles.showAllText}>{t('messages.backToSimple')}</Text>
+        </Pressable>
+      ) : null}
+
+      {simple ? (
+        <>
+          <View style={styles.tileGrid}>
+            {tiles.map(({ contact }) => {
+              const unread = unreadCount(contact.id);
+              return (
+                <Pressable
+                  key={contact.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open chat with ${contact.name}${unread ? `, ${unread} unread` : ''}`}
+                  onPress={() => router.push(`/chat/${contact.id}`)}
+                  style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
+                >
+                  <Avatar name={contact.name} isGroup={contact.isGroup} uri={contact.avatar} size={96} />
+                  <Text style={styles.tileName} numberOfLines={1}>
+                    {contact.name}
+                  </Text>
+                  {unread > 0 ? (
+                    <View style={styles.tileBadge}>
+                      <Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setShowAll(true)}
+            style={({ pressed }) => [styles.showAllBtn, pressed && styles.pressed]}
+          >
+            <Ionicons name="list" size={24} color={colors.primary} />
+            <Text style={styles.showAllText}>{t('messages.allChats')}</Text>
+          </Pressable>
+        </>
+      ) : q ? (
         <SearchResults
           styles={styles}
           colors={colors}
@@ -354,6 +412,43 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     justifyContent: 'center',
   },
   badgeText: { color: colors.textOnDark, fontSize: fonts.small - 2, fontWeight: '800' },
+  tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, justifyContent: 'center', marginTop: spacing.sm },
+  tile: {
+    width: '45%',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  tileName: { fontSize: fonts.title, fontWeight: '800', color: colors.text, paddingHorizontal: spacing.sm },
+  tileBadge: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    minWidth: 26,
+    height: 26,
+    borderRadius: 13,
+    paddingHorizontal: 6,
+    backgroundColor: UNREAD_BADGE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  showAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: TAP_TARGET,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    marginTop: spacing.sm,
+  },
+  showAllText: { fontSize: fonts.body, fontWeight: '800', color: colors.primary },
   relation: { flex: 1, fontSize: fonts.small, color: colors.textMuted },
   time: { fontSize: fonts.small - 2, color: colors.textMuted },
   callBtn: {

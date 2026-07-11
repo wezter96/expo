@@ -27,6 +27,7 @@ const READS_KEY = 'kinly.reads.v1';
 const SOS_KEY = 'kinly.sos.v1';
 const FAV_KEY = 'kinly.favorites.v1';
 const SAVED_KEY = 'kinly.saved.v1';
+const SIMPLE_KEY = 'kinly.simple.v1';
 
 type State = {
   contacts: Contact[];
@@ -69,6 +70,9 @@ type Store = {
   isSaved: (messageId: string) => boolean;
   toggleSaved: (messageId: string) => void;
   savedMessages: () => Message[];
+  /** Simple mode: the home screen shows only big favorite tiles. */
+  simpleMode: boolean;
+  setSimpleMode: (on: boolean) => void;
   /** Safety: block / unblock / report a person (by their user id). */
   isBlocked: (userId: string) => boolean;
   blockContact: (userId: string) => Promise<void>;
@@ -160,6 +164,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       AsyncStorage.setItem(SAVED_KEY, JSON.stringify(next)).catch(() => {});
       return next;
     });
+  }, []);
+
+  // Simple mode (big favorite tiles on the home screen).
+  const [simpleMode, setSimpleModeState] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(SIMPLE_KEY)
+      .then((v) => setSimpleModeState(v === '1'))
+      .catch(() => {});
+  }, []);
+  const setSimpleMode = useCallback((on: boolean) => {
+    setSimpleModeState(on);
+    AsyncStorage.setItem(SIMPLE_KEY, on ? '1' : '0').catch(() => {});
   }, []);
 
   // Pull the full picture from the server (contacts + their messages).
@@ -527,6 +543,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     isSaved,
     toggleSaved,
     savedMessages,
+    simpleMode,
+    setSimpleMode,
     isBlocked,
     blockContact,
     unblockContact,

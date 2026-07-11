@@ -58,6 +58,8 @@ const en: Record<string, string> = {
   'messages.joinGroup': 'Join a group',
   'messages.addTitle': 'Add',
   'messages.addPrompt': 'What would you like to do?',
+  'messages.allChats': 'Show all chats',
+  'messages.backToSimple': 'Back to simple view',
   'messages.getHelp': 'Get help — call {name}',
   'messages.people': 'People',
   'messages.messages': 'Messages',
@@ -104,6 +106,7 @@ const en: Record<string, string> = {
   'chat.noResults': 'No messages match your search.',
   'chat.typingOne': '{name} is typing…',
   'chat.typingMany': 'Several people are typing…',
+  'chat.mention': 'Mention someone',
 
   'saved.title': 'Saved messages',
   'saved.empty': 'No saved messages yet',
@@ -208,6 +211,8 @@ const en: Record<string, string> = {
   'display.dark': 'Dark',
   'display.auto': 'Automatic',
   'display.langSystem': 'Phone language',
+  'display.simpleMode': 'Simple mode',
+  'display.simpleModeHint': 'Home shows only big buttons for your favorite people.',
 };
 
 const sv: Record<string, string> = {
@@ -257,6 +262,8 @@ const sv: Record<string, string> = {
   'messages.joinGroup': 'Gå med i en grupp',
   'messages.addTitle': 'Lägg till',
   'messages.addPrompt': 'Vad vill du göra?',
+  'messages.allChats': 'Visa alla chattar',
+  'messages.backToSimple': 'Tillbaka till enkel vy',
   'messages.getHelp': 'Få hjälp — ring {name}',
   'messages.people': 'Personer',
   'messages.messages': 'Meddelanden',
@@ -303,6 +310,7 @@ const sv: Record<string, string> = {
   'chat.noResults': 'Inga meddelanden matchar din sökning.',
   'chat.typingOne': '{name} skriver…',
   'chat.typingMany': 'Flera personer skriver…',
+  'chat.mention': 'Nämn någon',
 
   'saved.title': 'Sparade meddelanden',
   'saved.empty': 'Inga sparade meddelanden än',
@@ -407,6 +415,8 @@ const sv: Record<string, string> = {
   'display.dark': 'Mörkt',
   'display.auto': 'Automatiskt',
   'display.langSystem': 'Telefonens språk',
+  'display.simpleMode': 'Enkelt läge',
+  'display.simpleModeHint': 'Hemskärmen visar bara stora knappar för dina favoritpersoner.',
 };
 
 const CATALOGS: Record<Lang, Record<string, string>> = { en, sv };

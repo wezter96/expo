@@ -51,6 +51,33 @@ const URL_RE = /(https?:\/\/|www\.)\S+/i;
 // A typing row older than this counts as "stopped"; we re-ping every 3s while
 // the user is actively typing so it stays fresh.
 const TYPING_TTL = 6000;
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Render text so "@Name" runs (for known member names) are highlighted. */
+function renderWithMentions(
+  text: string,
+  names: string[] | undefined,
+  mentionStyle: unknown
+): React.ReactNode {
+  if (!names?.length || !text.includes('@')) return text;
+  // Longest names first so "@Mary Jane" wins over "@Mary".
+  const sorted = [...names].filter(Boolean).sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(`(@(?:${sorted.map(escapeRegExp).join('|')}))`, 'gi');
+  const parts = text.split(pattern);
+  if (parts.length === 1) return text;
+  return parts.map((p, i) =>
+    i % 2 === 1 ? (
+      <Text key={i} style={mentionStyle as never}>
+        {p}
+      </Text>
+    ) : (
+      p
+    )
+  );
+}
 import { clockTime } from '../../src/time';
 
 export default function Chat() {
@@ -333,6 +360,30 @@ export default function Chat() {
       const rd = reads.find((r) => r.userId === other.id);
       if (rd && rd.at >= lastMine.at) seenLabel = 'Seen';
     }
+  }
+
+  // Delivery state for a message I sent: seen (someone read past it),
+  // delivered (a recipient has been online since), or just sent.
+  const tickFor = (m: Message): 'sent' | 'delivered' | 'seen' => {
+    if (reads.some((r) => r.userId !== meId && r.at >= m.at)) return 'seen';
+    const others = contact!.isGroup ? contact!.members ?? [] : other ? [other] : [];
+    if (others.some((o) => o.lastSeen && Date.parse(o.lastSeen) >= m.at)) return 'delivered';
+    return 'sent';
+  };
+
+  const memberNames = contact.isGroup ? (contact.members ?? []).map((m) => m.name).filter(Boolean) : undefined;
+
+  // Insert "@Name " into the draft (groups).
+  function mentionPicker() {
+    const members = contact!.members ?? [];
+    if (!members.length) return;
+    Alert.alert(t('chat.mention'), undefined, [
+      ...members.slice(0, 8).map((m) => ({
+        text: `@${m.name}`,
+        onPress: () => setDraft((d) => `${d}${d && !d.endsWith(' ') ? ' ' : ''}@${m.name} `),
+      })),
+      { text: t('common.cancel'), style: 'cancel' as const },
+    ]);
   }
 
   function speak(text: string) {
@@ -632,6 +683,8 @@ export default function Chat() {
               onTapReaction={(emoji) => online && toggleReaction(item.id, emoji)}
               onRetry={() => retryMessage(item.id)}
               onViewPhoto={setViewingPhoto}
+              tick={item.mine && online ? tickFor(item) : undefined}
+              mentionNames={memberNames}
             />
           );
         }}
@@ -768,6 +821,16 @@ export default function Chat() {
             >
               <Ionicons name="camera" size={30} color={colors.primary} />
             </Pressable>
+            {contact.isGroup ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('chat.mention')}
+                onPress={mentionPicker}
+                style={({ pressed }) => [styles.attachBtn, pressed && styles.pressed]}
+              >
+                <Ionicons name="at" size={30} color={colors.primary} />
+              </Pressable>
+            ) : null}
             <TextInput
               style={styles.input}
               placeholder={t('chat.writeMessage')}
@@ -853,6 +916,8 @@ function Bubble({
   onTapReaction,
   onRetry,
   onViewPhoto,
+  tick,
+  mentionNames,
 }: {
   message: Message;
   onSpeak: () => void;
@@ -870,6 +935,10 @@ function Bubble({
   onTapReaction: (emoji: string) => void;
   onRetry: () => void;
   onViewPhoto: (uri: string) => void;
+  /** Delivery state of my own message: single, double, or highlighted double tick. */
+  tick?: 'sent' | 'delivered' | 'seen';
+  /** Group member names — "@Name" runs in the text get highlighted. */
+  mentionNames?: string[];
 }) {
   const { colors, fonts } = useTheme();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
@@ -931,7 +1000,7 @@ function Bubble({
 
         {message.text ? (
           <Text style={[styles.bubbleText, mine ? styles.textMine : styles.textTheirs]}>
-            {message.text}
+            {renderWithMentions(message.text, mentionNames, [styles.mention, mine ? styles.textMine : null])}
           </Text>
         ) : null}
 
@@ -946,7 +1015,11 @@ function Bubble({
           {mine && message.status === 'sending' ? (
             <Ionicons name="time-outline" size={16} color="#D6E5F5" />
           ) : mine && message.status !== 'failed' ? (
-            <Ionicons name="checkmark" size={16} color="#D6E5F5" />
+            <Ionicons
+              name={tick === 'sent' || !tick ? 'checkmark' : 'checkmark-done'}
+              size={16}
+              color={tick === 'seen' ? '#7FE3C0' : '#D6E5F5'}
+            />
           ) : null}
           <Text style={[styles.time, mine ? styles.timeMine : styles.timeTheirs]}>
             {clockTime(message.at)}
@@ -1056,6 +1129,7 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   searchInput: { flex: 1, fontSize: fonts.body, color: colors.text, paddingVertical: 4 },
   typingBar: { paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
   typingText: { fontSize: fonts.small, color: colors.textMuted, fontStyle: 'italic' },
+  mention: { fontWeight: '800', textDecorationLine: 'underline' },
   encNote: {
     flexDirection: 'row',
     alignItems: 'center',
