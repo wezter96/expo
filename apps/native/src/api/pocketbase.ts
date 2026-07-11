@@ -100,6 +100,7 @@ type ConversationDTO = {
   members: MemberDTO[];
   disappearTimer?: number;
   pinnedMessage?: string;
+  admins?: string[];
 };
 
 /** Build a public file URL for a PocketBase record file field. */
@@ -127,6 +128,7 @@ function toContact(c: ConversationDTO): Contact {
     members,
     disappearTimer: c.disappearTimer ?? 0,
     pinnedMessage: c.pinnedMessage || undefined,
+    admins: c.admins ?? [],
   };
 }
 
@@ -483,8 +485,14 @@ export async function createGroup(title: string, memberIds: string[]): Promise<s
   if (!pb || !pb.authStore.record) return null;
   const me = pb.authStore.record.id;
   const members = Array.from(new Set([me, ...memberIds]));
-  const rec = await pb.collection('conversations').create({ title, isGroup: true, members, createdBy: me });
+  const rec = await pb.collection('conversations').create({ title, isGroup: true, members, createdBy: me, admins: [me] });
   return rec.id;
+}
+
+/** Replace a group's admin list (admins only — enforced server-side). */
+export async function setGroupAdmins(conversationId: string, adminIds: string[]): Promise<void> {
+  if (!pb) return;
+  await pb.collection('conversations').update(conversationId, { admins: Array.from(new Set(adminIds)) });
 }
 
 /** Rename a group. */

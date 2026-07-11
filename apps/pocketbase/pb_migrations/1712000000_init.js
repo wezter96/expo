@@ -88,6 +88,17 @@ migrate(
           cascadeDelete: false,
           maxSelect: 1,
         },
+        // Group admins (defaults to the creator). Only admins may rename the
+        // group or change its member list / admin list — enforced by the
+        // onRecordUpdateRequest hook, since the updateRule must stay open for
+        // member-level fields (pinnedMessage, disappearTimer).
+        {
+          type: 'relation',
+          name: 'admins',
+          collectionId: users.id,
+          cascadeDelete: false,
+          maxSelect: 10,
+        },
         { type: 'autodate', name: 'created', onCreate: true },
         { type: 'autodate', name: 'updated', onCreate: true, onUpdate: true },
       ],

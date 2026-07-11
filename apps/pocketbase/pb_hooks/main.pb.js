@@ -50,6 +50,8 @@ function mapConversation(conv, meId) {
     disappearTimer: conv.getInt('disappearTimer') || 0,
     // id of the pinned message ('' = none).
     pinnedMessage: conv.getString('pinnedMessage') || '',
+    // group admin user ids ([] = legacy group, everyone may manage)
+    admins: conv.get('admins') || [],
   };
 }
 
@@ -808,6 +810,59 @@ onRecordCreateRequest((e) => {
   }
   e.next();
 }, 'messages');
+
+// ===========================================================================
+// Group governance — only admins may rename a group or change its member or
+// admin lists. The collection updateRule stays open to all members because
+// member-level fields (pinnedMessage, disappearTimer) must remain writable;
+// this hook narrows just the governance fields. A member may always remove
+// themself (leave). Legacy groups with no admins keep the old free-for-all.
+// ===========================================================================
+
+onRecordUpdateRequest((e) => {
+  const rec = e.record;
+  if (!rec.getBool('isGroup') || !e.auth) {
+    e.next();
+    return;
+  }
+  let old;
+  try {
+    old = $app.findRecordById('conversations', rec.id);
+  } catch (_) {
+    e.next();
+    return;
+  }
+  const sorted = (v) => (v || []).slice().sort().join(',');
+  const oldMembers = sorted(old.get('members'));
+  const newMembers = sorted(rec.get('members'));
+  const membersChanged = oldMembers !== newMembers;
+  const titleChanged = old.getString('title') !== rec.getString('title');
+  const adminsChanged = sorted(old.get('admins')) !== sorted(rec.get('admins'));
+  if (!membersChanged && !titleChanged && !adminsChanged) {
+    e.next();
+    return;
+  }
+
+  const admins = old.get('admins') || [];
+  const isAdmin = admins.length === 0 || admins.indexOf(e.auth.id) !== -1;
+
+  // Leaving: the only change is the caller's own removal from members.
+  const oldArr = (old.get('members') || []).slice();
+  const newArr = (rec.get('members') || []).slice();
+  const removedSelf =
+    membersChanged &&
+    !titleChanged &&
+    !adminsChanged &&
+    newArr.length === oldArr.length - 1 &&
+    oldArr.indexOf(e.auth.id) !== -1 &&
+    newArr.indexOf(e.auth.id) === -1 &&
+    newArr.every((id) => oldArr.indexOf(id) !== -1);
+
+  if (!isAdmin && !removedSelf) {
+    throw new ForbiddenError('Only group admins can change this.');
+  }
+  e.next();
+}, 'conversations');
 
 // ===========================================================================
 // Push notifications — when a message is created, notify the other members

@@ -17,6 +17,8 @@ export type Contact = {
   disappearTimer?: number;
   /** id of the pinned message in this conversation, if any. */
   pinnedMessage?: string;
+  /** Group admin user ids (empty/undefined = legacy group, everyone manages). */
+  admins?: string[];
 };
 
 export type MessageKind = 'text' | 'photo' | 'voice';

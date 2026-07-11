@@ -9,6 +9,7 @@ import {
   getGroupInvite,
   renameGroup,
   serverEnabled,
+  setGroupAdmins,
   updateGroupMembers,
   type KnownPerson,
 } from '../../src/api/pocketbase';
@@ -32,6 +33,9 @@ export default function GroupSettings() {
   const me = currentUserId();
   const members = contact?.members ?? []; // the OTHER members
   const currentIds = [me, ...members.map((m) => m.id)].filter(Boolean) as string[];
+  const admins = contact?.admins ?? [];
+  // Legacy groups (no admins recorded) keep the old everyone-manages behavior.
+  const isAdmin = admins.length === 0 || (!!me && admins.includes(me));
 
   const [title, setTitle] = useState(contact?.name ?? '');
   const [people, setPeople] = useState<KnownPerson[]>([]);
@@ -69,6 +73,10 @@ export default function GroupSettings() {
         text: 'Remove',
         style: 'destructive',
         onPress: async () => {
+          // Drop their admin seat first (while the caller is still an admin).
+          if (admins.includes(memberId)) {
+            await setGroupAdmins(contact.id, admins.filter((x) => x !== memberId));
+          }
           await updateGroupMembers(
             contact.id,
             currentIds.filter((x) => x !== memberId)
@@ -77,6 +85,18 @@ export default function GroupSettings() {
         },
       },
     ]);
+  };
+
+  const toggleAdmin = async (memberId: string) => {
+    const has = admins.includes(memberId);
+    if (has && admins.length === 1) {
+      Alert.alert(t('group.admin'), t('group.lastAdmin'));
+      return;
+    }
+    // Legacy group: the first grant records the current member set's manager.
+    const base = admins.length === 0 ? [me].filter(Boolean) as string[] : admins;
+    await setGroupAdmins(contact.id, has ? base.filter((x) => x !== memberId) : [...base, memberId]);
+    await refresh();
   };
 
   const addPerson = async (personId: string) => {
@@ -134,6 +154,7 @@ export default function GroupSettings() {
         placeholder="Group name"
         placeholderTextColor={colors.textMuted}
         autoCapitalize="words"
+        editable={isAdmin}
       />
 
       <Text style={styles.label}>In this group</Text>
@@ -141,19 +162,38 @@ export default function GroupSettings() {
         <View style={styles.member}>
           <Avatar name="You" size={48} />
           <Text style={styles.memberName}>You</Text>
+          {me && admins.includes(me) ? <Text style={styles.adminBadge}>{t('group.admin')}</Text> : null}
         </View>
         {members.map((m) => (
           <View key={m.id} style={styles.member}>
             <Avatar name={m.name} uri={m.avatar} size={48} />
             <Text style={styles.memberName}>{m.name}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${m.name}`} onPress={() => removeMember(m.id, m.name)} hitSlop={10}>
-              <Ionicons name="close-circle" size={28} color={colors.danger} />
-            </Pressable>
+            {admins.includes(m.id) ? <Text style={styles.adminBadge}>{t('group.admin')}</Text> : null}
+            {isAdmin ? (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={admins.includes(m.id) ? `${t('group.removeAdmin')} ${m.name}` : `${t('group.makeAdmin')} ${m.name}`}
+                  onPress={() => toggleAdmin(m.id)}
+                  hitSlop={10}
+                >
+                  <Ionicons
+                    name={admins.includes(m.id) ? 'shield' : 'shield-outline'}
+                    size={26}
+                    color={admins.includes(m.id) ? colors.primary : colors.textMuted}
+                  />
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${m.name}`} onPress={() => removeMember(m.id, m.name)} hitSlop={10}>
+                  <Ionicons name="close-circle" size={28} color={colors.danger} />
+                </Pressable>
+              </>
+            ) : null}
           </View>
         ))}
       </View>
+      {!isAdmin ? <Text style={styles.hint}>{t('group.onlyAdmins')}</Text> : null}
 
-      {people.length > 0 ? (
+      {isAdmin && people.length > 0 ? (
         <>
           <Text style={styles.label}>Add people</Text>
           <View style={styles.card}>
@@ -210,6 +250,18 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   card: { backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 2, borderColor: colors.border, overflow: 'hidden' },
   member: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   memberName: { flex: 1, fontSize: fonts.body, fontWeight: '700', color: colors.text },
+  adminBadge: {
+    fontSize: fonts.small - 2,
+    fontWeight: '800',
+    color: colors.primary,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    overflow: 'hidden',
+  },
+  hint: { fontSize: fonts.small, color: colors.textMuted, textAlign: 'center' },
   pressed: { opacity: 0.7 },
   invite: {
     flexDirection: 'row',

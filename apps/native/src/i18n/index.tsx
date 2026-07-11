@@ -187,6 +187,11 @@ const en: Record<string, string> = {
   'album.empty': 'No photos yet',
   'album.emptyBody': 'Photos you and {name} share will appear here.',
 
+  'group.admin': 'Admin',
+  'group.makeAdmin': 'Make admin',
+  'group.removeAdmin': 'Remove as admin',
+  'group.lastAdmin': 'A group needs at least one admin.',
+  'group.onlyAdmins': 'Only group admins can rename the group or change members.',
   'group.inviteLink': 'Invite link',
   'group.shareInvite': 'Share invite link',
   'group.inviteBody': 'Anyone with this link can join the group.',
@@ -391,6 +396,11 @@ const sv: Record<string, string> = {
   'album.empty': 'Inga foton än',
   'album.emptyBody': 'Foton som du och {name} delar visas här.',
 
+  'group.admin': 'Admin',
+  'group.makeAdmin': 'Gör till admin',
+  'group.removeAdmin': 'Ta bort som admin',
+  'group.lastAdmin': 'En grupp behöver minst en admin.',
+  'group.onlyAdmins': 'Bara gruppens admins kan byta namn på gruppen eller ändra medlemmar.',
   'group.inviteLink': 'Inbjudningslänk',
   'group.shareInvite': 'Dela inbjudningslänk',
   'group.inviteBody': 'Alla med den här länken kan gå med i gruppen.',
