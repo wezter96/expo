@@ -73,6 +73,9 @@ type Store = {
   /** Simple mode: the home screen shows only big favorite tiles. */
   simpleMode: boolean;
   setSimpleMode: (on: boolean) => void;
+  /** Chat backup: snapshot everything local, or merge a snapshot back in. */
+  exportSnapshot: () => { contacts: Contact[]; messages: Message[] };
+  restoreSnapshot: (data: { contacts?: Contact[]; messages?: Message[] }) => number;
   /** Safety: block / unblock / report a person (by their user id). */
   isBlocked: (userId: string) => boolean;
   blockContact: (userId: string) => Promise<void>;
@@ -295,6 +298,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         .sort((a, b) => a.at - b.at);
     },
     [state.messages, state.contacts]
+  );
+
+  const exportSnapshot = useCallback(
+    () => ({ contacts: state.contacts, messages: state.messages }),
+    [state.contacts, state.messages]
+  );
+
+  // Merge a backup into the local store, deduping by id. Returns how many
+  // messages were new. Existing (likely fresher) records win.
+  const restoreSnapshot = useCallback(
+    (data: { contacts?: Contact[]; messages?: Message[] }) => {
+      const haveMsg = new Set(state.messages.map((m) => m.id));
+      const freshMsgs = (data.messages ?? []).filter((m) => m?.id && !haveMsg.has(m.id));
+      const haveContact = new Set(state.contacts.map((c) => c.id));
+      const freshContacts = (data.contacts ?? []).filter((c) => c?.id && !haveContact.has(c.id));
+      setState((s) => ({
+        contacts: [...s.contacts, ...freshContacts.filter((c) => !s.contacts.some((x) => x.id === c.id))],
+        messages: [...s.messages, ...freshMsgs.filter((m) => !s.messages.some((x) => x.id === m.id))],
+      }));
+      return freshMsgs.length;
+    },
+    [state.contacts, state.messages]
   );
 
   const savedMessages = useCallback(
@@ -545,6 +570,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     savedMessages,
     simpleMode,
     setSimpleMode,
+    exportSnapshot,
+    restoreSnapshot,
     isBlocked,
     blockContact,
     unblockContact,

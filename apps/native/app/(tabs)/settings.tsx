@@ -88,6 +88,13 @@ export default function Settings() {
       onPress: () => router.push('/encryption'),
     },
     {
+      icon: 'archive',
+      label: t('backup.title'),
+      value: t('backup.settingsValue'),
+      color: colors.primary,
+      onPress: () => router.push('/backup'),
+    },
+    {
       icon: 'alert-circle',
       label: t('settings.emergency'),
       value: emergencyName ?? t('settings.emergencyNotSet'),
