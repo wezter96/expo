@@ -891,10 +891,25 @@ onRecordAfterCreateSuccess((e) => {
     const title = isGroup ? conv.getString('title') || 'Kinly' : authorName;
     const body = isGroup ? authorName + ' ' + summary : summary;
 
+    // Skip members who muted this conversation (until empty = forever).
+    const nowStamp = new Date().toISOString().replace('T', ' ');
+    const isMuted = (userId) => {
+      try {
+        const m = $app.findFirstRecordByFilter('mutes', 'conversation = {:c} && user = {:u}', {
+          c: conv.id,
+          u: userId,
+        });
+        const until = m.getString('until');
+        return !until || until > nowStamp;
+      } catch (_) {
+        return false;
+      }
+    };
+
     const memberIds = conv.get('members') || [];
     const messages = [];
     for (const id of memberIds) {
-      if (id === authorId) continue;
+      if (id === authorId || isMuted(id)) continue;
       let token = '';
       try {
         token = $app.findRecordById('users', id).getString('pushToken');

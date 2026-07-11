@@ -19,6 +19,7 @@ import { WebNotice } from '../src/components/WebNotice';
 import { applyGlobalFont } from '../src/global-font';
 import { I18nProvider } from '../src/i18n';
 import { Onboarding } from '../src/onboarding/Onboarding';
+import { loadPrivacyPrefs } from '../src/privacy';
 import { StoreProvider } from '../src/store';
 import { ThemeProvider, useTheme } from '../src/theme-context';
 
@@ -81,6 +82,8 @@ function Gate() {
         <Stack.Screen name="display" options={{ title: 'Display', presentation: 'modal' }} />
         <Stack.Screen name="encryption" options={{ title: 'Encryption', presentation: 'modal' }} />
         <Stack.Screen name="backup" options={{ title: 'Chat backup', presentation: 'modal' }} />
+        <Stack.Screen name="privacy-settings" options={{ title: 'Privacy & safety', presentation: 'modal' }} />
+        <Stack.Screen name="legal" options={{ title: 'Privacy & terms' }} />
         <Stack.Screen name="link-device" options={{ title: 'Link a device', presentation: 'modal' }} />
         <Stack.Screen name="verify" options={{ title: 'Verify', presentation: 'modal' }} />
       </Stack>
@@ -99,6 +102,9 @@ export default function RootLayout() {
     AtkinsonHyperlegible_400Regular,
     AtkinsonHyperlegible_700Bold,
   });
+  useEffect(() => {
+    void loadPrivacyPrefs();
+  }, []);
   if (fontsLoaded) applyGlobalFont();
 
   if (!fontsLoaded) {

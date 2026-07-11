@@ -21,13 +21,16 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   currentUserId,
+  fetchMutes,
   fetchReactions,
   fetchReads,
   fetchTyping,
   markConversationRead,
+  muteConversation,
   pingTyping,
   scheduleMessage,
   serverEnabled,
+  unmuteConversation,
   setReaction,
   startCall,
   subscribeCollection,
@@ -108,6 +111,7 @@ export default function Chat() {
     setPinned,
     isSaved,
     toggleSaved,
+    deleteChat,
   } = useStore();
   const [draft, setDraft] = useState('');
   const [searching, setSearching] = useState(false);
@@ -122,6 +126,7 @@ export default function Chat() {
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [reads, setReads] = useState<Read[]>([]);
   const [typingUsers, setTypingUsers] = useState<Typing[]>([]);
+  const [muted, setMuted] = useState(false);
   const [reactingTo, setReactingTo] = useState<string | null>(null);
   const lastPingRef = useRef(0);
   const listRef = useRef<FlatList<Message>>(null);
@@ -164,6 +169,16 @@ export default function Chat() {
     if (!id || editing) return;
     void saveDraft(id, draft);
   }, [id, draft, editing]);
+
+  // Whether this conversation is muted (for the menu label).
+  useEffect(() => {
+    if (!id || !online) return;
+    let active = true;
+    fetchMutes().then((m) => active && setMuted(!!m[id]));
+    return () => {
+      active = false;
+    };
+  }, [id, online]);
 
   // Live "X is typing…" — refresh on any typing event, and locally expire rows
   // that have gone quiet (no event fires when someone simply stops).
@@ -533,13 +548,56 @@ export default function Chat() {
     );
   }
 
+  function muteMenu() {
+    const pick = (hours?: number) => {
+      setMuted(true);
+      void muteConversation(contact!.id, hours);
+    };
+    Alert.alert(t('chat.mute'), undefined, [
+      { text: t('chat.mute8h'), onPress: () => pick(8) },
+      { text: t('chat.mute1w'), onPress: () => pick(24 * 7) },
+      { text: t('chat.muteAlways'), onPress: () => pick() },
+      { text: t('common.cancel'), style: 'cancel' },
+    ]);
+  }
+
+  function confirmDeleteChat() {
+    Alert.alert(t('chat.deleteChat'), t('chat.deleteChatConfirm', { name: contact!.name }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('chat.deleteChat'),
+        style: 'destructive',
+        onPress: () => {
+          deleteChat(contact!.id);
+          router.back();
+        },
+      },
+    ]);
+  }
+
   function moreMenu() {
     const fav = isFavorite(contact!.id);
     const timer = disappearTimerFor(contact!.id);
     const opts: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [
       { text: fav ? 'Remove from favorites' : 'Add to favorites', onPress: () => toggleFavorite(contact!.id) },
       { text: t('chat.photos'), onPress: () => router.push(`/album/${contact!.id}`) },
-      ...(online ? [{ text: t('scheduled.title'), onPress: () => router.push('/scheduled') }] : []),
+      ...(online
+        ? [
+            muted
+              ? {
+                  text: t('chat.unmute'),
+                  onPress: () => {
+                    setMuted(false);
+                    void unmuteConversation(contact!.id);
+                  },
+                }
+              : { text: t('chat.mute'), onPress: muteMenu },
+            { text: t('scheduled.title'), onPress: () => router.push('/scheduled') },
+          ]
+        : []),
+      ...(!contact!.isGroup
+        ? [{ text: t('chat.deleteChat'), style: 'destructive' as const, onPress: confirmDeleteChat }]
+        : []),
       {
         text: `Disappearing messages: ${disappearingLabel(timer)}`,
         onPress: disappearingMenu,

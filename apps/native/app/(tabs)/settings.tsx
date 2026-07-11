@@ -95,6 +95,13 @@ export default function Settings() {
       onPress: () => router.push('/backup'),
     },
     {
+      icon: 'eye-off',
+      label: t('privacy.title'),
+      value: t('privacy.settingsValue'),
+      color: colors.primary,
+      onPress: () => router.push('/privacy-settings'),
+    },
+    {
       icon: 'alert-circle',
       label: t('settings.emergency'),
       value: emergencyName ?? t('settings.emergencyNotSet'),

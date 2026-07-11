@@ -43,9 +43,11 @@ migrate(
     users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
     users.indexes.push("CREATE UNIQUE INDEX idx_users_username ON users (username) WHERE username != ''");
     // Any signed-in user can view a user record (needed to show names & photos
-    // of the people you chat with). You can only change your own record.
+    // of the people you chat with). You can only change — or delete — your own
+    // record (in-app account deletion is a store/GDPR requirement).
     users.viewRule = '@request.auth.id != ""';
     users.updateRule = 'id = @request.auth.id';
+    users.deleteRule = 'id = @request.auth.id';
     app.save(users);
 
     // --- conversations --------------------------------------------------
@@ -220,6 +222,27 @@ migrate(
     });
     app.save(typing);
 
+    // --- mutes (per-user conversation mute) ------------------------------
+    // One row per (conversation, user) silences message pushes for that user
+    // until `until` (empty = muted until unmuted). Checked by the push hook.
+    const mutes = new Collection({
+      type: 'base',
+      name: 'mutes',
+      listRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      viewRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      createRule:
+        '@request.auth.id != "" && user.id ?= @request.auth.id && conversation.members.id ?= @request.auth.id',
+      updateRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      deleteRule: '@request.auth.id != "" && user.id ?= @request.auth.id',
+      fields: [
+        { type: 'relation', name: 'conversation', required: true, cascadeDelete: true, maxSelect: 1, collectionId: conversations.id },
+        { type: 'relation', name: 'user', required: true, cascadeDelete: true, maxSelect: 1, collectionId: users.id },
+        { type: 'date', name: 'until' },
+      ],
+      indexes: ['CREATE UNIQUE INDEX idx_mutes_conv_user ON mutes (conversation, user)'],
+    });
+    app.save(mutes);
+
     // --- reminders (medication & appointment) ---------------------------
     // Private to the owner. Local notifications fire on the device; the
     // server copy lets a caregiver be alerted if a daily medication reminder
@@ -381,7 +404,7 @@ migrate(
     app.save(conversationKeys);
   },
   (app) => {
-    for (const name of ['scheduled_messages', 'guardianships', 'reminders', 'conversation_keys', 'reports', 'calls', 'reactions', 'typing', 'reads', 'messages', 'conversations']) {
+    for (const name of ['mutes', 'scheduled_messages', 'guardianships', 'reminders', 'conversation_keys', 'reports', 'calls', 'reactions', 'typing', 'reads', 'messages', 'conversations']) {
       try {
         app.delete(app.findCollectionByNameOrId(name));
       } catch (_) {

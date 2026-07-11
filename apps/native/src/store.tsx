@@ -28,6 +28,7 @@ const SOS_KEY = 'kinly.sos.v1';
 const FAV_KEY = 'kinly.favorites.v1';
 const SAVED_KEY = 'kinly.saved.v1';
 const SIMPLE_KEY = 'kinly.simple.v1';
+const HIDDEN_KEY = 'kinly.hiddenChats.v1';
 
 type State = {
   contacts: Contact[];
@@ -76,6 +77,9 @@ type Store = {
   /** Chat backup: snapshot everything local, or merge a snapshot back in. */
   exportSnapshot: () => { contacts: Contact[]; messages: Message[] };
   restoreSnapshot: (data: { contacts?: Contact[]; messages?: Message[] }) => number;
+  /** Delete a chat from this device: hides it and its history up to now.
+   *  A new incoming message makes the conversation reappear (fresh). */
+  deleteChat: (contactId: string) => void;
   /** Safety: block / unblock / report a person (by their user id). */
   isBlocked: (userId: string) => boolean;
   blockContact: (userId: string) => Promise<void>;
@@ -165,6 +169,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setSavedIds((s) => {
       const next = s.includes(messageId) ? s.filter((x) => x !== messageId) : [...s, messageId];
       AsyncStorage.setItem(SAVED_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  // "Deleted" chats: contactId -> hidden-at millis. Messages up to that time
+  // stay filtered out on this device; anything newer resurfaces the chat.
+  const [hidden, setHidden] = useState<Record<string, number>>({});
+  useEffect(() => {
+    AsyncStorage.getItem(HIDDEN_KEY)
+      .then((v) => v && setHidden(JSON.parse(v)))
+      .catch(() => {});
+  }, []);
+  const deleteChat = useCallback((contactId: string) => {
+    setHidden((h) => {
+      const next = { ...h, [contactId]: Date.now() };
+      AsyncStorage.setItem(HIDDEN_KEY, JSON.stringify(next)).catch(() => {});
       return next;
     });
   }, []);
@@ -293,11 +313,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // Hide messages past the disappearing timer immediately (the server cron
       // deletes them for good shortly after).
       const cutoff = timer > 0 ? Date.now() - timer * 1000 : 0;
+      // History before a local "delete chat" stays hidden on this device.
+      const hiddenAt = hidden[contactId] ?? 0;
       return state.messages
-        .filter((m) => m.contactId === contactId && (!cutoff || m.at >= cutoff))
+        .filter((m) => m.contactId === contactId && (!cutoff || m.at >= cutoff) && m.at > hiddenAt)
         .sort((a, b) => a.at - b.at);
     },
-    [state.messages, state.contacts]
+    [state.messages, state.contacts, hidden]
   );
 
   const exportSnapshot = useCallback(
@@ -524,19 +546,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const conversations = useMemo<Conversation[]>(() => {
     return state.contacts
       .map((contact) => {
+        const hiddenAt = hidden[contact.id] ?? 0;
         const messages = state.messages
-          .filter((m) => m.contactId === contact.id)
+          .filter((m) => m.contactId === contact.id && m.at > hiddenAt)
           .sort((a, b) => a.at - b.at);
         const lastAt = messages.length ? messages[messages.length - 1].at : 0;
-        return { contact, messages, lastAt };
+        return { contact, messages, lastAt, hiddenAt };
       })
+      // A locally "deleted" chat stays out of the list until something new
+      // arrives after the delete.
+      .filter((c) => !c.hiddenAt || c.messages.length > 0)
+      .map(({ contact, messages, lastAt }) => ({ contact, messages, lastAt }))
       .sort((a, b) => {
         const fa = favorites.includes(a.contact.id) ? 1 : 0;
         const fb = favorites.includes(b.contact.id) ? 1 : 0;
         if (fa !== fb) return fb - fa; // favorites first
         return b.lastAt - a.lastAt;
       });
-  }, [state.contacts, state.messages, favorites]);
+  }, [state.contacts, state.messages, favorites, hidden]);
 
   const totalUnread = useMemo(
     () => state.contacts.reduce((sum, c) => sum + unreadCount(c.id), 0),
@@ -572,6 +599,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setSimpleMode,
     exportSnapshot,
     restoreSnapshot,
+    deleteChat,
     isBlocked,
     blockContact,
     unblockContact,

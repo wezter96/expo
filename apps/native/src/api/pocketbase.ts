@@ -3,6 +3,7 @@ import PocketBase, { type RecordModel } from 'pocketbase';
 import './eventsource'; // installs the realtime EventSource polyfill on native
 import type { AgentResult } from '../ai/agent';
 import * as e2ee from '../e2ee';
+import { privacyPrefs } from '../privacy';
 import type { Contact, Message, MessageKind } from '../types';
 
 /**
@@ -940,6 +941,88 @@ export function unblockUser(userId: string): Promise<void> {
   return setBlocked(userId, false);
 }
 
+/** Names + photos for everyone the current user has blocked. */
+export async function fetchBlockedPeople(): Promise<KnownPerson[]> {
+  if (!pb) return [];
+  const out: KnownPerson[] = [];
+  for (const id of blockedIds()) {
+    try {
+      const u = await pb.collection('users').getOne(id);
+      out.push({ id: u.id, name: (u.name as string) || 'Someone', phone: (u.phone as string) || '', avatar: fileUrl('users', u.id, (u.avatar as string) || '') });
+    } catch {
+      out.push({ id, name: 'Someone', phone: '' });
+    }
+  }
+  return out;
+}
+
+/** Permanently delete the signed-in user's account (GDPR / store requirement).
+ *  The server cascades everything owned by the account; the caller must sign
+ *  out and clear local state afterwards. */
+export async function deleteAccount(): Promise<boolean> {
+  if (!pb || !pb.authStore.record) return false;
+  try {
+    await pb.collection('users').delete(pb.authStore.record.id);
+    pb.authStore.clear();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// --- per-conversation mute ---------------------------------------------------
+
+/** Millis until which a conversation is muted: undefined = not muted,
+ *  Infinity = muted until unmuted. */
+export async function fetchMutes(): Promise<Record<string, number>> {
+  if (!pb || !pb.authStore.record) return {};
+  try {
+    const rows = await pb.collection('mutes').getFullList({
+      filter: pb.filter('user = {:u}', { u: pb.authStore.record.id }),
+    });
+    const out: Record<string, number> = {};
+    const now = Date.now();
+    for (const r of rows) {
+      const until = r.until ? Date.parse(r.until as string) : Infinity;
+      if (until > now) out[r.conversation as string] = until;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Mute a conversation for `hours`, or indefinitely when omitted. Upserts. */
+export async function muteConversation(conversationId: string, hours?: number): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  const me = pb.authStore.record.id;
+  const until = hours ? new Date(Date.now() + hours * 3600_000).toISOString() : '';
+  try {
+    const existing = await pb
+      .collection('mutes')
+      .getFirstListItem(pb.filter('conversation = {:c} && user = {:u}', { c: conversationId, u: me }));
+    await pb.collection('mutes').update(existing.id, { until });
+  } catch {
+    try {
+      await pb.collection('mutes').create({ conversation: conversationId, user: me, until });
+    } catch {
+      // best-effort
+    }
+  }
+}
+
+export async function unmuteConversation(conversationId: string): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  try {
+    const existing = await pb
+      .collection('mutes')
+      .getFirstListItem(pb.filter('conversation = {:c} && user = {:u}', { c: conversationId, u: pb.authStore.record.id }));
+    await pb.collection('mutes').delete(existing.id);
+  } catch {
+    // not muted
+  }
+}
+
 /** File a report about a person (goes to the admins, not visible in-app). */
 export async function reportUser(input: {
   reportedUserId: string;
@@ -1043,9 +1126,11 @@ export async function fetchReads(conversationId: string): Promise<Read[]> {
   }
 }
 
-/** Record that the current user has read a conversation up to now (server-side, for "Seen"). */
+/** Record that the current user has read a conversation up to now (server-side, for "Seen").
+ *  No-op when the user turned read receipts off. */
 export async function markConversationRead(conversationId: string): Promise<void> {
   if (!pb || !pb.authStore.record) return;
+  if (!privacyPrefs().readReceipts) return;
   const me = pb.authStore.record.id;
   const now = new Date().toISOString();
   try {
@@ -1082,9 +1167,11 @@ export async function fetchTyping(conversationId: string): Promise<Typing[]> {
 }
 
 /** Signal that the current user is typing in a conversation (upsert, bumps the
- *  row's updated time). Callers should throttle this. */
+ *  row's updated time). Callers should throttle this. No-op when the user
+ *  turned the typing indicator off. */
 export async function pingTyping(conversationId: string): Promise<void> {
   if (!pb || !pb.authStore.record) return;
+  if (!privacyPrefs().typingIndicator) return;
   const me = pb.authStore.record.id;
   try {
     const existing = await pb
