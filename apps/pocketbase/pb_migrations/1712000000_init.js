@@ -74,6 +74,16 @@ migrate(
         // Shareable group invite code (empty = no active link). Redeemed via
         // the /api/kinly/group/join route, which adds the caller as a member.
         { type: 'text', name: 'inviteCode', max: 24 },
+        // Message requests (1:1 only): members who accepted this conversation.
+        // The initiator is auto-accepted; the other side sees a request until
+        // they accept. Members may only add/remove THEMSELVES (hook-enforced).
+        {
+          type: 'relation',
+          name: 'accepted',
+          collectionId: users.id,
+          cascadeDelete: false,
+          maxSelect: 50,
+        },
         {
           type: 'relation',
           name: 'members',

@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { acceptConversation, isPendingRequest } from '../../src/api/pocketbase';
 import { Avatar } from '../../src/components/Avatar';
 import { useTranslation } from '../../src/i18n';
 import { useStore } from '../../src/store';
@@ -14,8 +15,23 @@ import { relativeTime } from '../../src/time';
 export default function Messages() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { conversations, ready, unreadCount, emergencyId, getContact, sendMessage, isFavorite, toggleFavorite, simpleMode } =
-    useStore();
+  const {
+    conversations: allConversations,
+    ready,
+    unreadCount,
+    emergencyId,
+    getContact,
+    sendMessage,
+    isFavorite,
+    toggleFavorite,
+    simpleMode,
+    blockContact,
+    deleteChat,
+    refresh,
+  } = useStore();
+  // Pending message requests are pulled out of the normal list.
+  const requests = allConversations.filter((c) => isPendingRequest(c.contact));
+  const conversations = allConversations.filter((c) => !isPendingRequest(c.contact));
   const { colors, fonts } = useTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
@@ -117,6 +133,57 @@ export default function Messages() {
           </Pressable>
         ) : null}
       </View>
+      ) : null}
+
+      {requests.length > 0 && !q ? (
+        <>
+          <Text style={styles.searchHeading}>{t('requests.title')}</Text>
+          {requests.map(({ contact }) => (
+            <View key={contact.id} style={styles.requestCard}>
+              <View style={styles.requestHead}>
+                <Avatar name={contact.name} uri={contact.avatar} size={52} />
+                <View style={styles.rowText}>
+                  <Text style={styles.name} numberOfLines={1}>{contact.name}</Text>
+                  <Text style={styles.relation}>{t('requests.wantsToChat')}</Text>
+                </View>
+              </View>
+              <View style={styles.requestActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('requests.accept')} ${contact.name}`}
+                  onPress={async () => {
+                    await acceptConversation(contact.id, contact.accepted ?? []);
+                    await refresh();
+                  }}
+                  style={({ pressed }) => [styles.requestAccept, pressed && styles.pressed]}
+                >
+                  <Text style={styles.requestAcceptText}>{t('requests.accept')}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('requests.block')} ${contact.name}`}
+                  onPress={() => {
+                    const otherId = contact.members?.[0]?.id;
+                    Alert.alert(t('requests.block'), t('requests.blockConfirm', { name: contact.name }), [
+                      { text: t('common.cancel'), style: 'cancel' },
+                      {
+                        text: t('requests.block'),
+                        style: 'destructive',
+                        onPress: () => {
+                          if (otherId) void blockContact(otherId);
+                          deleteChat(contact.id);
+                        },
+                      },
+                    ]);
+                  }}
+                  style={({ pressed }) => [styles.requestBlock, pressed && styles.pressed]}
+                >
+                  <Text style={styles.requestBlockText}>{t('requests.block')}</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </>
       ) : null}
 
       {simpleMode && showAll ? (
@@ -449,6 +516,35 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     marginTop: spacing.sm,
   },
   showAllText: { fontSize: fonts.body, fontWeight: '800', color: colors.primary },
+  requestCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  requestHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  requestActions: { flexDirection: 'row', gap: spacing.sm },
+  requestAccept: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: TAP_TARGET - 8,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
+  },
+  requestAcceptText: { fontSize: fonts.body, fontWeight: '800', color: colors.textOnDark },
+  requestBlock: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: TAP_TARGET - 8,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.danger,
+  },
+  requestBlockText: { fontSize: fonts.body, fontWeight: '800', color: colors.danger },
   relation: { flex: 1, fontSize: fonts.small, color: colors.textMuted },
   time: { fontSize: fonts.small - 2, color: colors.textMuted },
   callBtn: {

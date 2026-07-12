@@ -52,6 +52,8 @@ function mapConversation(conv, meId) {
     pinnedMessage: conv.getString('pinnedMessage') || '',
     // group admin user ids ([] = legacy group, everyone may manage)
     admins: conv.get('admins') || [],
+    // members who accepted this 1:1 ([] = legacy, treated as accepted)
+    accepted: conv.get('accepted') || [],
   };
 }
 
@@ -161,6 +163,8 @@ routerAdd('POST', '/api/kinly/direct', (e) => {
   conv.set('title', '');
   conv.set('members', [auth.id, other.id]);
   conv.set('createdBy', auth.id);
+  // The initiator accepts implicitly; the other person gets a request.
+  conv.set('accepted', [auth.id]);
   $app.save(conv);
   return e.json(200, { id: conv.id });
 });
@@ -593,6 +597,8 @@ routerAdd('POST', '/api/kinly/ward/contacts', (e) => {
   conv.set('title', '');
   conv.set('members', [wardId, other.id]);
   conv.set('createdBy', wardId);
+  // The ward trusts their guardian's add; the other person gets a request.
+  conv.set('accepted', [wardId]);
   $app.save(conv);
 
   // Tell the ward someone new is in their list (content-free beyond names).
@@ -821,7 +827,7 @@ onRecordCreateRequest((e) => {
 
 onRecordUpdateRequest((e) => {
   const rec = e.record;
-  if (!rec.getBool('isGroup') || !e.auth) {
+  if (!e.auth) {
     e.next();
     return;
   }
@@ -833,6 +839,22 @@ onRecordUpdateRequest((e) => {
     return;
   }
   const sorted = (v) => (v || []).slice().sort().join(',');
+
+  // Message-request acceptance: a member may only add or remove THEMSELVES
+  // from `accepted` — nobody can accept a request on someone else's behalf.
+  const oldAcc = (old.get('accepted') || []).slice();
+  const newAcc = (rec.get('accepted') || []).slice();
+  if (sorted(oldAcc) !== sorted(newAcc)) {
+    const withoutMe = (arr) => arr.filter((id) => id !== e.auth.id);
+    if (sorted(withoutMe(oldAcc)) !== sorted(withoutMe(newAcc))) {
+      throw new ForbiddenError('You can only accept for yourself.');
+    }
+  }
+
+  if (!rec.getBool('isGroup')) {
+    e.next();
+    return;
+  }
   const oldMembers = sorted(old.get('members'));
   const newMembers = sorted(rec.get('members'));
   const membersChanged = oldMembers !== newMembers;

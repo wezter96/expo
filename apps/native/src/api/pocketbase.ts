@@ -102,6 +102,7 @@ type ConversationDTO = {
   disappearTimer?: number;
   pinnedMessage?: string;
   admins?: string[];
+  accepted?: string[];
 };
 
 /** Build a public file URL for a PocketBase record file field. */
@@ -130,6 +131,7 @@ function toContact(c: ConversationDTO): Contact {
     disappearTimer: c.disappearTimer ?? 0,
     pinnedMessage: c.pinnedMessage || undefined,
     admins: c.admins ?? [],
+    accepted: c.accepted ?? [],
   };
 }
 
@@ -192,6 +194,24 @@ export async function startDirectChat(handle: string): Promise<string> {
   if (!pb) throw new Error('Not connected to a server.');
   const res = await pb.send<{ id: string }>('/api/kinly/direct', { method: 'POST', body: { handle } });
   return res.id;
+}
+
+/** Accept a message request: adds the current user to the conversation's
+ *  accepted list (the hook only permits self-changes). */
+export async function acceptConversation(conversationId: string, accepted: string[]): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  const me = pb.authStore.record.id;
+  await pb
+    .collection('conversations')
+    .update(conversationId, { accepted: Array.from(new Set([...accepted, me])) });
+}
+
+/** True if this 1:1 is still a pending request for the current user. */
+export function isPendingRequest(contact: Contact): boolean {
+  const me = pb?.authStore.record?.id;
+  if (!me || contact.isGroup) return false;
+  const acc = contact.accepted ?? [];
+  return acc.length > 0 && !acc.includes(me);
 }
 
 /** Set (or change) the signed-in user's public username. Lowercased; 3–30 chars. */

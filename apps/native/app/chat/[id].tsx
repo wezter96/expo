@@ -20,8 +20,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  acceptConversation,
   currentUserId,
   fetchMutes,
+  isPendingRequest,
   fetchReactions,
   fetchReads,
   fetchTyping,
@@ -112,6 +114,7 @@ export default function Chat() {
     isSaved,
     toggleSaved,
     deleteChat,
+    refresh,
   } = useStore();
   const [draft, setDraft] = useState('');
   const [searching, setSearching] = useState(false);
@@ -620,6 +623,7 @@ export default function Chat() {
   }
 
   const blocked = !!other && online && isBlocked(other.id);
+  const pendingRequest = online && isPendingRequest(contact);
 
   // "X is typing…" — names of others typing within the freshness window.
   const typingNames = typingUsers
@@ -858,6 +862,35 @@ export default function Chat() {
           >
             <Text style={styles.unblockText}>Unblock</Text>
           </Pressable>
+        </View>
+      ) : pendingRequest ? (
+        <View style={[styles.requestBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+          <Text style={styles.requestText}>{t('requests.chatBar', { name: contact.name })}</Text>
+          <View style={styles.requestBtns}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('requests.accept')}
+              onPress={async () => {
+                await acceptConversation(contact.id, contact.accepted ?? []);
+                await refresh();
+              }}
+              style={({ pressed }) => [styles.requestAcceptBtn, pressed && styles.pressed]}
+            >
+              <Text style={styles.requestAcceptText}>{t('requests.accept')}</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('requests.block')}
+              onPress={() => {
+                if (other) void blockContact(other.id);
+                deleteChat(contact.id);
+                router.back();
+              }}
+              style={({ pressed }) => [styles.requestBlockBtn, pressed && styles.pressed]}
+            >
+              <Text style={styles.requestBlockText}>{t('requests.block')}</Text>
+            </Pressable>
+          </View>
         </View>
       ) : (
       <>
@@ -1221,6 +1254,34 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   typingBar: { paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
   typingText: { fontSize: fonts.small, color: colors.textMuted, fontStyle: 'italic' },
   mention: { fontWeight: '800', textDecorationLine: 'underline' },
+  requestBar: {
+    padding: spacing.md,
+    gap: spacing.sm,
+    backgroundColor: colors.card,
+    borderTopWidth: 2,
+    borderTopColor: colors.border,
+  },
+  requestText: { fontSize: fonts.body, color: colors.text, fontWeight: '600', textAlign: 'center' },
+  requestBtns: { flexDirection: 'row', gap: spacing.sm },
+  requestAcceptBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: TAP_TARGET,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
+  },
+  requestAcceptText: { fontSize: fonts.body, fontWeight: '800', color: colors.textOnDark },
+  requestBlockBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: TAP_TARGET,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.danger,
+  },
+  requestBlockText: { fontSize: fonts.body, fontWeight: '800', color: colors.danger },
   encNote: {
     flexDirection: 'row',
     alignItems: 'center',

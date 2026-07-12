@@ -6,20 +6,26 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Share,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { startDirectChat } from '../src/api/pocketbase';
+import { useTranslation } from '../src/i18n';
 import { useStore } from '../src/store';
 import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../src/theme';
 import { useTheme } from '../src/theme-context';
+
+// Where new users go to get Kinly. Update once store listings exist.
+const DOWNLOAD_URL = 'https://kinly.app/get';
 
 export default function NewChat() {
   const router = useRouter();
   const { refresh } = useStore();
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [handle, setHandle] = useState('');
   const [busy, setBusy] = useState(false);
@@ -38,6 +44,10 @@ export default function NewChat() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const invite = () => {
+    void Share.share({ message: t('invite.message', { link: DOWNLOAD_URL }) }).catch(() => {});
   };
 
   return (
@@ -69,6 +79,20 @@ export default function NewChat() {
           style={({ pressed }) => [styles.primary, (busy || !handle.trim() || pressed) && styles.dim]}
         >
           {busy ? <ActivityIndicator color={colors.textOnDark} /> : <Text style={styles.primaryText}>Start chat</Text>}
+        </Pressable>
+
+        {/* Not on Kinly yet? Send them an invite — shown always, and it's the
+            natural next step when a lookup fails. */}
+        <Pressable
+          accessibilityRole="button"
+          onPress={invite}
+          style={({ pressed }) => [styles.invite, error && styles.inviteHighlight, pressed && styles.dim]}
+        >
+          <Ionicons name="share-social" size={24} color={colors.primary} />
+          <View style={styles.inviteText}>
+            <Text style={styles.inviteTitle}>{t('invite.button')}</Text>
+            <Text style={styles.inviteBody}>{t('invite.hint')}</Text>
+          </View>
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -114,5 +138,20 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   },
   dim: { opacity: 0.6 },
   primaryText: { fontSize: fonts.button, fontWeight: '800', color: colors.textOnDark },
+  invite: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  inviteHighlight: { borderColor: colors.primary },
+  inviteText: { flex: 1 },
+  inviteTitle: { fontSize: fonts.body, fontWeight: '800', color: colors.primary },
+  inviteBody: { fontSize: fonts.small, color: colors.textMuted, marginTop: 2 },
   });
 }

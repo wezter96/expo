@@ -19,6 +19,8 @@ export type Contact = {
   pinnedMessage?: string;
   /** Group admin user ids (empty/undefined = legacy group, everyone manages). */
   admins?: string[];
+  /** Members who accepted this 1:1 (empty = legacy, treated as accepted). */
+  accepted?: string[];
 };
 
 export type MessageKind = 'text' | 'photo' | 'voice';
