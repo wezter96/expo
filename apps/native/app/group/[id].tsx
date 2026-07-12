@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -11,6 +12,7 @@ import {
   serverEnabled,
   setGroupAdmins,
   updateGroupMembers,
+  updateGroupPhoto,
   type KnownPerson,
 } from '../../src/api/pocketbase';
 import { Avatar } from '../../src/components/Avatar';
@@ -143,8 +145,33 @@ export default function GroupSettings() {
     ]);
   };
 
+  const changePhoto = async () => {
+    if (!serverEnabled()) return;
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, allowsEditing: true, aspect: [1, 1] });
+    const uri = res.assets?.[0]?.uri;
+    if (res.canceled || !uri) return;
+    try {
+      await updateGroupPhoto(contact.id, uri);
+      await refresh();
+    } catch {
+      Alert.alert(t('group.photoError'));
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('group.changePhoto')}
+        onPress={changePhoto}
+        style={({ pressed }) => [styles.photoWrap, pressed && styles.pressed]}
+      >
+        <Avatar name={contact.name} isGroup uri={contact.avatar} size={96} />
+        <View style={styles.photoBadge}>
+          <Ionicons name="camera" size={18} color={colors.textOnDark} />
+        </View>
+      </Pressable>
+
       <Text style={styles.label}>Group name</Text>
       <TextInput
         style={styles.input}
@@ -262,6 +289,20 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     overflow: 'hidden',
   },
   hint: { fontSize: fonts.small, color: colors.textMuted, textAlign: 'center' },
+  photoWrap: { alignSelf: 'center', marginTop: spacing.sm },
+  photoBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.card,
+  },
   pressed: { opacity: 0.7 },
   invite: {
     flexDirection: 'row',

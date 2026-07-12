@@ -42,7 +42,7 @@ type Store = {
   getContact: (id: string) => Contact | undefined;
   findContact: (query: string) => Contact | undefined;
   messagesFor: (contactId: string) => Message[];
-  sendMessage: (contactId: string, text: string, replyTo?: string) => void;
+  sendMessage: (contactId: string, text: string, replyTo?: string, mentions?: string[]) => void;
   /** Edit one of my own text messages. */
   editMessage: (id: string, contactId: string, text: string) => void;
   sendPhoto: (contactId: string, uri: string, caption?: string) => void;
@@ -435,9 +435,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const sendMessage = useCallback(
-    (contactId: string, text: string, replyTo?: string) => {
+    (contactId: string, text: string, replyTo?: string, mentions?: string[]) => {
       const body = text.trim();
-      dispatchSend(contactId, { text: body, kind: 'text', replyTo }, (id) => pushMessage(id, contactId, body, replyTo));
+      dispatchSend(contactId, { text: body, kind: 'text', replyTo }, (id) =>
+        pushMessage(id, contactId, body, replyTo, mentions)
+      );
     },
     [dispatchSend]
   );

@@ -40,6 +40,11 @@ migrate(
     // active guardian can adjust them remotely; the owner's device applies
     // newer server prefs on launch (see /api/kinly/ward/prefs).
     users.fields.add(new Field({ type: 'text', name: 'prefs', max: 500 }));
+    // Quiet hours ("HH:MM" local, empty = off) + the device's UTC offset in
+    // minutes, so the push hook can evaluate the window in the user's time.
+    users.fields.add(new Field({ type: 'text', name: 'quietStart', max: 5 }));
+    users.fields.add(new Field({ type: 'text', name: 'quietEnd', max: 5 }));
+    users.fields.add(new Field({ type: 'number', name: 'quietTz' }));
     users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
     users.indexes.push("CREATE UNIQUE INDEX idx_users_username ON users (username) WHERE username != ''");
     // Any signed-in user can view a user record (needed to show names & photos
@@ -74,6 +79,8 @@ migrate(
         // Shareable group invite code (empty = no active link). Redeemed via
         // the /api/kinly/group/join route, which adds the caller as a member.
         { type: 'text', name: 'inviteCode', max: 24 },
+        // Group photo (any member may set it, like the group name pre-admins).
+        { type: 'file', name: 'photo', maxSelect: 1, maxSize: 10485760, mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] },
         // Message requests (1:1 only): members who accepted this conversation.
         // The initiator is auto-accepted; the other side sees a request until
         // they accept. Members may only add/remove THEMSELVES (hook-enforced).
@@ -146,8 +153,12 @@ migrate(
           maxSelect: 1,
           collectionId: users.id,
         },
-        // "text" (default), "photo", or "voice"
+        // "text" (default), "photo", "voice", or "video"
         { type: 'text', name: 'kind', max: 20 },
+        // Group @mentions (user ids). Deliberate metadata trade-off: exposing
+        // WHO was mentioned lets the push hook ring them through a mute, but
+        // the mention itself stays inside the encrypted text.
+        { type: 'relation', name: 'mentions', cascadeDelete: false, maxSelect: 20, collectionId: users.id },
         // caption / body text (not required — photo & voice messages may have none)
         { type: 'text', name: 'text', max: 2000 },
         // End-to-end encryption: when enc = true, `text` is empty and the real
@@ -423,7 +434,7 @@ migrate(
     }
     try {
       const users = app.findCollectionByNameOrId('users');
-      for (const f of ['phone', 'username', 'pushToken', 'lastSeen', 'blocked', 'identityKey', 'prekeyKey', 'kemKey', 'lastCheckIn', 'caregiver', 'prefs']) {
+      for (const f of ['phone', 'username', 'pushToken', 'lastSeen', 'blocked', 'identityKey', 'prekeyKey', 'kemKey', 'lastCheckIn', 'caregiver', 'prefs', 'quietStart', 'quietEnd', 'quietTz']) {
         if (users.fields.getByName(f)) users.fields.removeByName(f);
       }
       app.save(users);

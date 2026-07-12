@@ -299,7 +299,14 @@ export default function Chat() {
       editMessage(editing.id, contact!.id, text);
       setEditing(null);
     } else {
-      sendMessage(contact!.id, text, replyingTo?.id);
+      // In groups, "@Name" runs become mention metadata so the person is
+      // notified even through a mute or quiet hours.
+      const mentionIds = contact!.isGroup
+        ? (contact!.members ?? [])
+            .filter((m) => m.name && text.toLowerCase().includes(`@${m.name.toLowerCase()}`))
+            .map((m) => m.id)
+        : undefined;
+      sendMessage(contact!.id, text, replyingTo?.id, mentionIds?.length ? mentionIds : undefined);
       setReplyingTo(null);
     }
     setDraft('');

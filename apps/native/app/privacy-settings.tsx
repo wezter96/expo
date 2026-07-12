@@ -4,7 +4,16 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { deleteAccount, fetchBlockedPeople, serverEnabled, unblockUser, type KnownPerson } from '../src/api/pocketbase';
+import {
+  deleteAccount,
+  fetchBlockedPeople,
+  quietHours,
+  serverEnabled,
+  setQuietHours,
+  unblockUser,
+  type KnownPerson,
+  type QuietHours,
+} from '../src/api/pocketbase';
 import { Avatar } from '../src/components/Avatar';
 import { useAuth } from '../src/auth/AuthContext';
 import { useTranslation } from '../src/i18n';
@@ -24,13 +33,22 @@ export default function PrivacySettings() {
 
   const [prefs, setPrefs] = useState<PrivacyPrefs>({ readReceipts: true, typingIndicator: true });
   const [blocked, setBlocked] = useState<KnownPerson[]>([]);
+  const [quiet, setQuiet] = useState<QuietHours>(null);
   const [busy, setBusy] = useState(false);
   const online = serverEnabled();
 
   useEffect(() => {
     loadPrivacyPrefs().then(setPrefs);
-    if (online) fetchBlockedPeople().then(setBlocked);
+    if (online) {
+      fetchBlockedPeople().then(setBlocked);
+      setQuiet(quietHours());
+    }
   }, [online]);
+
+  const applyQuiet = (win: QuietHours) => {
+    setQuiet(win);
+    void setQuietHours(win).catch(() => {});
+  };
 
   const toggle = (key: keyof PrivacyPrefs) => (value: boolean) => {
     setPrefs((p) => ({ ...p, [key]: value }));
@@ -94,6 +112,48 @@ export default function PrivacySettings() {
           <Switch value={prefs.typingIndicator} onValueChange={toggle('typingIndicator')} />
         </View>
       </View>
+
+      {online ? (
+        <>
+          <Text style={styles.label}>{t('privacy.quiet')}</Text>
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <Ionicons name="moon" size={26} color={colors.primary} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>{t('privacy.quietTitle')}</Text>
+                <Text style={styles.rowHint}>
+                  {quiet ? t('privacy.quietOn', { start: quiet.start, end: quiet.end }) : t('privacy.quietHint')}
+                </Text>
+              </View>
+              <Switch value={!!quiet} onValueChange={(on) => applyQuiet(on ? { start: '22:00', end: '07:00' } : null)} />
+            </View>
+            {quiet ? (
+              <View style={[styles.row, styles.divider, styles.chipsRow]}>
+                {[
+                  { start: '21:00', end: '07:00' },
+                  { start: '22:00', end: '07:00' },
+                  { start: '22:00', end: '08:00' },
+                ].map((w) => {
+                  const active = quiet.start === w.start && quiet.end === w.end;
+                  return (
+                    <Pressable
+                      key={`${w.start}-${w.end}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      onPress={() => applyQuiet(w)}
+                      style={[styles.chip, active && styles.chipOn]}
+                    >
+                      <Text style={[styles.chipText, active && styles.chipTextOn]}>
+                        {w.start}–{w.end}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+          </View>
+        </>
+      ) : null}
 
       <Text style={styles.label}>{t('privacy.blocked')}</Text>
       {!online ? <Text style={styles.muted}>{t('guardians.offline')}</Text> : null}
@@ -160,6 +220,17 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     rowText: { flex: 1 },
     rowLabel: { fontSize: fonts.body, fontWeight: '700', color: colors.text },
     rowHint: { fontSize: fonts.small, color: colors.textMuted, marginTop: 2 },
+    chipsRow: { flexWrap: 'wrap', gap: spacing.sm },
+    chip: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      borderWidth: 2,
+      borderColor: colors.border,
+    },
+    chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+    chipText: { fontSize: fonts.small, fontWeight: '800', color: colors.text },
+    chipTextOn: { color: colors.textOnDark },
     blockedRow: {
       flexDirection: 'row',
       alignItems: 'center',

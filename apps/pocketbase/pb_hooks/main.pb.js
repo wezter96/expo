@@ -54,6 +54,8 @@ function mapConversation(conv, meId) {
     admins: conv.get('admins') || [],
     // members who accepted this 1:1 ([] = legacy, treated as accepted)
     accepted: conv.get('accepted') || [],
+    // group photo filename ('' = none)
+    photo: conv.getString('photo') || '',
   };
 }
 
@@ -928,14 +930,39 @@ onRecordAfterCreateSuccess((e) => {
       }
     };
 
+    // Quiet hours, evaluated in the recipient's own timezone (quietTz is the
+    // device's offset from UTC in minutes). A window may cross midnight.
+    const inQuietHours = (u) => {
+      const start = u.getString('quietStart');
+      const end = u.getString('quietEnd');
+      if (!start || !end) return false;
+      const toMin = (s) => {
+        const p = String(s).split(':');
+        return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
+      };
+      const now = new Date();
+      const local = (now.getUTCHours() * 60 + now.getUTCMinutes() + (u.getInt('quietTz') || 0) + 2880) % 1440;
+      const s = toMin(start);
+      const en = toMin(end);
+      return s <= en ? local >= s && local < en : local >= s || local < en;
+    };
+
+    // A direct @mention rings through mutes and quiet hours.
+    const mentions = msg.get('mentions') || [];
+
     const memberIds = conv.get('members') || [];
     const messages = [];
     for (const id of memberIds) {
-      if (id === authorId || isMuted(id)) continue;
-      let token = '';
+      if (id === authorId) continue;
+      let recipient;
       try {
-        token = $app.findRecordById('users', id).getString('pushToken');
-      } catch (_) {}
+        recipient = $app.findRecordById('users', id);
+      } catch (_) {
+        continue;
+      }
+      const mentioned = mentions.indexOf(id) !== -1;
+      if (!mentioned && (isMuted(id) || inQuietHours(recipient))) continue;
+      const token = recipient.getString('pushToken');
       if (token) {
         messages.push({
           to: token,

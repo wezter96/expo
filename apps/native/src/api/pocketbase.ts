@@ -103,6 +103,7 @@ type ConversationDTO = {
   pinnedMessage?: string;
   admins?: string[];
   accepted?: string[];
+  photo?: string;
 };
 
 /** Build a public file URL for a PocketBase record file field. */
@@ -126,7 +127,7 @@ function toContact(c: ConversationDTO): Contact {
     phone: c.phone,
     isGroup: c.isGroup,
     memberNames: c.memberNames,
-    avatar: c.isGroup ? undefined : members[0]?.avatar,
+    avatar: c.isGroup ? fileUrl('conversations', c.id, c.photo ?? '') : members[0]?.avatar,
     members,
     disappearTimer: c.disappearTimer ?? 0,
     pinnedMessage: c.pinnedMessage || undefined,
@@ -522,6 +523,35 @@ export async function renameGroup(conversationId: string, title: string): Promis
   await pb.collection('conversations').update(conversationId, { title: title.trim() });
 }
 
+/** Set a group's photo. */
+export async function updateGroupPhoto(conversationId: string, uri: string): Promise<void> {
+  if (!pb) return;
+  await pb.collection('conversations').update(conversationId, fileField(uri, 'photo', 'group.jpg', 'image/jpeg'));
+}
+
+// --- quiet hours -------------------------------------------------------------
+
+export type QuietHours = { start: string; end: string } | null;
+
+export function quietHours(): QuietHours {
+  const r = pb?.authStore.record;
+  const start = (r?.quietStart as string) || '';
+  const end = (r?.quietEnd as string) || '';
+  return start && end ? { start, end } : null;
+}
+
+/** Set (or clear, with null) the do-not-disturb window. Stores the device's
+ *  UTC offset so the server evaluates the window in local time. */
+export async function setQuietHours(win: QuietHours): Promise<void> {
+  if (!pb || !pb.authStore.record) return;
+  await pb.collection('users').update(pb.authStore.record.id, {
+    quietStart: win?.start ?? '',
+    quietEnd: win?.end ?? '',
+    quietTz: -new Date().getTimezoneOffset(),
+  });
+  await pb.collection('users').authRefresh();
+}
+
 /** Replace a group's member list (add / remove / leave). Rotates the
  *  conversation key so a removed member can't read future messages. */
 export async function updateGroupMembers(conversationId: string, memberIds: string[]): Promise<void> {
@@ -721,11 +751,18 @@ export function newId(): string {
 
 /** Send a text message with a client-provided id. Returns true on success.
  *  Sealed end-to-end when the conversation has E2EE keys; plaintext otherwise. */
-export async function pushMessage(id: string, contactId: string, text: string, replyTo?: string): Promise<boolean> {
+export async function pushMessage(
+  id: string,
+  contactId: string,
+  text: string,
+  replyTo?: string,
+  mentions?: string[]
+): Promise<boolean> {
   if (!pb || !pb.authStore.record) return false;
   try {
     const base: Record<string, unknown> = { id, conversation: contactId, author: pb.authStore.record.id, kind: 'text' };
     if (replyTo) base.replyTo = replyTo;
+    if (mentions?.length) base.mentions = mentions;
     const ck = await ensureConvKey(contactId);
     if (ck) {
       await pb
