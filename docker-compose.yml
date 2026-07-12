@@ -26,6 +26,32 @@ services:
     command:
       - serve
       - --http=0.0.0.0:8090
+    # --- Production scaling knobs (see SCALING.md) --------------------------
+    # Raise open-file limits so thousands of realtime (SSE) connections fit:
+    # ulimits:
+    #   nofile:
+    #     soft: 65536
+    #     hard: 65536
+    # Media on S3 instead of local disk: enable in the PocketBase admin UI
+    # (Settings → Files storage) with any S3-compatible store (B2/R2/S3) and
+    # put a CDN in front. Do this from day one — migrating later means moving
+    # every file.
+
+  # --- Optional: continuous SQLite replication (warm standby / DR) ---------
+  # Litestream streams every database change to an S3-compatible bucket:
+  # point-in-time restore + disaster recovery without touching the app.
+  # litestream:
+  #   image: litestream/litestream:0.3
+  #   container_name: kinly-litestream
+  #   restart: unless-stopped
+  #   command: replicate /pb_data/data.db s3://YOUR_BUCKET/kinly/data.db
+  #   environment:
+  #     LITESTREAM_ACCESS_KEY_ID: "..."
+  #     LITESTREAM_SECRET_ACCESS_KEY: "..."
+  #     # Non-AWS providers (B2/R2): also set the endpoint:
+  #     # AWS_ENDPOINT_URL_S3: "https://..."
+  #   volumes:
+  #     - pb_data:/pb_data
 
   livekit:
     image: livekit/livekit-server:v1.8

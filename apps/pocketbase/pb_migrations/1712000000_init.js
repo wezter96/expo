@@ -47,6 +47,8 @@ migrate(
     users.fields.add(new Field({ type: 'number', name: 'quietTz' }));
     users.indexes.push("CREATE UNIQUE INDEX idx_users_phone ON users (phone) WHERE phone != ''");
     users.indexes.push("CREATE UNIQUE INDEX idx_users_username ON users (username) WHERE username != ''");
+    // Sweep support: the check-in cron filters on caregiver.
+    users.indexes.push("CREATE INDEX idx_users_caregiver ON users (caregiver) WHERE caregiver != ''");
     // Any signed-in user can view a user record (needed to show names & photos
     // of the people you chat with). You can only change — or delete — your own
     // record (in-app account deletion is a store/GDPR requirement).
@@ -327,7 +329,11 @@ migrate(
         { type: 'autodate', name: 'created', onCreate: true },
         { type: 'autodate', name: 'updated', onCreate: true, onUpdate: true },
       ],
-      indexes: ['CREATE UNIQUE INDEX idx_guardianships_pair ON guardianships (ward, guardian)'],
+      indexes: [
+        'CREATE UNIQUE INDEX idx_guardianships_pair ON guardianships (ward, guardian)',
+        // Sweep + dashboard queries filter on status.
+        'CREATE INDEX idx_guardianships_status ON guardianships (status)',
+      ],
     });
     app.save(guardianships);
 

@@ -59,9 +59,13 @@ const EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
 const URL_RE = /(https?:\/\/|www\.)\S+/i;
 // Shared-location messages carry a maps link; the bubble shows an Open-map button.
 const MAPS_RE = /https:\/\/maps\.google\.com\/\?q=(-?[0-9.]+),(-?[0-9.]+)/;
-// A typing row older than this counts as "stopped"; we re-ping every 3s while
-// the user is actively typing so it stays fresh.
-const TYPING_TTL = 6000;
+// A typing row older than this counts as "stopped"; we re-ping every 6s while
+// the user is actively typing so it stays fresh. Generous values keep the
+// write rate low — typing churn is the main SQLite pressure at scale.
+const TYPING_TTL = 10000;
+const TYPING_PING_MS = 6000;
+// Don't broadcast typing in big groups — low value, high write cost.
+const TYPING_MAX_GROUP = 10;
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -121,6 +125,8 @@ export default function Chat() {
     toggleSaved,
     deleteChat,
     refresh,
+    hasOlder,
+    loadOlder,
   } = useStore();
   const [draft, setDraft] = useState('');
   const [searching, setSearching] = useState(false);
@@ -232,11 +238,14 @@ export default function Chat() {
     if (id && online) markConversationRead(id);
   }, [id, online, messages.length]);
 
+  // Keep the newest message in view — keyed on the newest id (not length), so
+  // prepending older history via "Load earlier" doesn't yank the view down.
+  const newestId = messages.length ? messages[messages.length - 1].id : '';
   useEffect(() => {
-    // Keep the newest message in view.
+    if (!newestId) return;
     const t = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     return () => clearTimeout(t);
-  }, [messages.length]);
+  }, [newestId]);
 
   useEffect(() => {
     // Opening the chat (and receiving while it's open) marks it read.
@@ -289,9 +298,10 @@ export default function Chat() {
 
   const onDraftChange = (text: string) => {
     setDraft(text);
-    if (online && id && !editing && text.trim()) {
+    const tooBig = contact?.isGroup && (contact.members?.length ?? 0) + 1 > TYPING_MAX_GROUP;
+    if (online && id && !editing && !tooBig && text.trim()) {
       const now = Date.now();
-      if (now - lastPingRef.current > 3000) {
+      if (now - lastPingRef.current > TYPING_PING_MS) {
         lastPingRef.current = now;
         void pingTyping(id);
       }
@@ -788,6 +798,18 @@ export default function Chat() {
         keyExtractor={(m) => m.id}
         onScrollToIndexFailed={() => {}}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          online && id && hasOlder(id) && !searching ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => id && void loadOlder(id)}
+              style={({ pressed }) => [styles.loadOlderBtn, pressed && styles.pressed]}
+            >
+              <Ionicons name="chevron-up-circle-outline" size={20} color={colors.primary} />
+              <Text style={styles.loadOlderText}>{t('chat.loadEarlier')}</Text>
+            </Pressable>
+          ) : null
+        }
         renderItem={({ item, index }) => {
           // Group consecutive messages from the same person: only the first of
           // a run shows the avatar + name, so the thread stays uncluttered.
@@ -1353,6 +1375,15 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     borderColor: 'rgba(128,128,128,0.35)',
   },
   mapBtnText: { fontSize: fonts.body, fontWeight: '800', color: colors.primary },
+  loadOlderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  loadOlderText: { fontSize: fonts.small, fontWeight: '800', color: colors.primary },
   encNote: {
     flexDirection: 'row',
     alignItems: 'center',

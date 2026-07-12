@@ -717,25 +717,71 @@ async function decryptMessage(r: RecordModel): Promise<{ text: string; mediaKey?
 
 // --- messages -------------------------------------------------------------
 
-export async function fetchMessages(contactId: string): Promise<Message[] | null> {
+/** How many messages a single page fetch returns. */
+export const MESSAGE_PAGE = 200;
+
+async function rowsToMessages(rows: RecordModel[], meId: string | null): Promise<Message[]> {
+  const out: Message[] = [];
+  for (const r of rows) {
+    const m = toMessage(r, meId);
+    if (r.enc) {
+      const d = await decryptMessage(r);
+      m.text = d.text;
+      m.mediaKey = d.mediaKey;
+    }
+    out.push(m);
+  }
+  return out;
+}
+
+/** A conversation's recent messages, windowed for scale:
+ *  - no `since`: the newest MESSAGE_PAGE messages (initial load)
+ *  - with `since` (epoch ms): only messages created after it (incremental sync)
+ *  Returns messages ascending. `hasMore` = an older page likely exists. */
+export async function fetchMessages(
+  contactId: string,
+  since?: number
+): Promise<{ messages: Message[]; hasMore: boolean } | null> {
   if (!pb || !pb.authStore.isValid) return null;
   try {
     const meId = currentUserId();
-    const rows = await pb.collection('messages').getFullList({
-      filter: pb.filter('conversation = {:id}', { id: contactId }),
-      sort: 'created',
-    });
-    const out: Message[] = [];
-    for (const r of rows) {
-      const m = toMessage(r, meId);
-      if (r.enc) {
-        const d = await decryptMessage(r);
-        m.text = d.text;
-        m.mediaKey = d.mediaKey;
-      }
-      out.push(m);
+    if (since) {
+      const iso = new Date(since).toISOString().replace('T', ' ');
+      const res = await pb.collection('messages').getList(1, MESSAGE_PAGE, {
+        filter: pb.filter('conversation = {:id} && created > {:t}', { id: contactId, t: iso }),
+        sort: 'created',
+      });
+      return { messages: await rowsToMessages(res.items, meId), hasMore: false };
     }
-    return out;
+    const res = await pb.collection('messages').getList(1, MESSAGE_PAGE, {
+      filter: pb.filter('conversation = {:id}', { id: contactId }),
+      sort: '-created',
+    });
+    return {
+      messages: await rowsToMessages(res.items.slice().reverse(), meId),
+      hasMore: res.items.length === MESSAGE_PAGE,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** The page of messages older than `before` (epoch ms), ascending. */
+export async function fetchOlderMessages(
+  contactId: string,
+  before: number
+): Promise<{ messages: Message[]; hasMore: boolean } | null> {
+  if (!pb || !pb.authStore.isValid) return null;
+  try {
+    const iso = new Date(before).toISOString().replace('T', ' ');
+    const res = await pb.collection('messages').getList(1, MESSAGE_PAGE, {
+      filter: pb.filter('conversation = {:id} && created < {:t}', { id: contactId, t: iso }),
+      sort: '-created',
+    });
+    return {
+      messages: await rowsToMessages(res.items.slice().reverse(), currentUserId()),
+      hasMore: res.items.length === MESSAGE_PAGE,
+    };
   } catch {
     return null;
   }
@@ -1032,19 +1078,31 @@ export function unblockUser(userId: string): Promise<void> {
   return setBlocked(userId, false);
 }
 
-/** Names + photos for everyone the current user has blocked. */
+/** Names + photos for everyone the current user has blocked (batched — one
+ *  query per 50 ids instead of one per person). */
 export async function fetchBlockedPeople(): Promise<KnownPerson[]> {
   if (!pb) return [];
-  const out: KnownPerson[] = [];
-  for (const id of blockedIds()) {
+  const ids = blockedIds();
+  const found = new Map<string, KnownPerson>();
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
     try {
-      const u = await pb.collection('users').getOne(id);
-      out.push({ id: u.id, name: (u.name as string) || 'Someone', phone: (u.phone as string) || '', avatar: fileUrl('users', u.id, (u.avatar as string) || '') });
+      const rows = await pb.collection('users').getFullList({
+        filter: chunk.map((id) => pb!.filter('id = {:id}', { id })).join(' || '),
+      });
+      for (const u of rows) {
+        found.set(u.id, {
+          id: u.id,
+          name: (u.name as string) || 'Someone',
+          phone: (u.phone as string) || '',
+          avatar: fileUrl('users', u.id, (u.avatar as string) || ''),
+        });
+      }
     } catch {
-      out.push({ id, name: 'Someone', phone: '' });
+      // fall through — missing users get placeholders below
     }
   }
-  return out;
+  return ids.map((id) => found.get(id) ?? { id, name: 'Someone', phone: '' });
 }
 
 /** Permanently delete the signed-in user's account (GDPR / store requirement).

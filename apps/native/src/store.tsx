@@ -6,6 +6,7 @@ import {
   editMessage as editMessageRemote,
   fetchContacts,
   fetchMessages,
+  fetchOlderMessages,
   isBlocked as isBlockedRemote,
   newId,
   pushMessage,
@@ -43,6 +44,9 @@ type Store = {
   getContact: (id: string) => Contact | undefined;
   findContact: (query: string) => Contact | undefined;
   messagesFor: (contactId: string) => Message[];
+  /** Paged history: is there more, and fetch the previous page. */
+  hasOlder: (contactId: string) => boolean;
+  loadOlder: (contactId: string) => Promise<void>;
   sendMessage: (contactId: string, text: string, replyTo?: string, mentions?: string[]) => void;
   /** Edit one of my own text messages. */
   editMessage: (id: string, contactId: string, text: string) => void;
@@ -203,18 +207,52 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(SIMPLE_KEY, on ? '1' : '0').catch(() => {});
   }, []);
 
-  // Pull the full picture from the server (contacts + their messages).
+  // Older-history availability per conversation (drives "Load earlier").
+  const [hasOlderMap, setHasOlderMap] = useState<Record<string, boolean>>({});
+
+  // Union by id; the incoming (server) version of a message wins, so edits
+  // and decrypted content refresh, while locally loaded older pages survive.
+  const mergeMessages = (existing: Message[], incoming: Message[]): Message[] => {
+    if (!incoming.length) return existing;
+    const byId = new Map(existing.map((m) => [m.id, m] as const));
+    for (const m of incoming) byId.set(m.id, m);
+    return [...byId.values()];
+  };
+
+  // Pull the current picture from the server. Scales by fetching only the
+  // newest window per conversation (in parallel) and merging — never the
+  // full history.
   const hydrateFromServer = useCallback(async (): Promise<boolean> => {
     const remoteContacts = await fetchContacts();
     if (!remoteContacts) return false;
-    const all: Message[] = [];
-    for (const c of remoteContacts) {
-      const ms = await fetchMessages(c.id);
-      if (ms) all.push(...ms);
-    }
-    setState({ contacts: remoteContacts, messages: all });
+    const pages = await Promise.all(remoteContacts.map((c) => fetchMessages(c.id)));
+    const older: Record<string, boolean> = {};
+    const incoming: Message[] = [];
+    remoteContacts.forEach((c, i) => {
+      const p = pages[i];
+      if (p) {
+        older[c.id] = p.hasMore;
+        incoming.push(...p.messages);
+      }
+    });
+    setHasOlderMap((h) => ({ ...h, ...older }));
+    setState((s) => ({ contacts: remoteContacts, messages: mergeMessages(s.messages, incoming) }));
     return true;
   }, []);
+
+  /** Fetch the previous page of history for a conversation. */
+  const loadOlder = useCallback(async (contactId: string) => {
+    const msgs = messagesRef.current.filter((m) => m.contactId === contactId);
+    const oldest = msgs.length ? Math.min(...msgs.map((m) => m.at)) : Date.now();
+    const page = await fetchOlderMessages(contactId, oldest);
+    if (!page) return;
+    setHasOlderMap((h) => ({ ...h, [contactId]: page.hasMore }));
+    if (page.messages.length) {
+      setState((s) => ({ ...s, messages: mergeMessages(s.messages, page.messages) }));
+    }
+  }, []);
+
+  const hasOlder = useCallback((contactId: string) => !!hasOlderMap[contactId], [hasOlderMap]);
 
   const refresh = useCallback(async () => {
     if (online && uid) await hydrateFromServer();
@@ -592,6 +630,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     getContact,
     findContact,
     messagesFor,
+    hasOlder,
+    loadOlder,
     sendMessage,
     editMessage,
     sendPhoto,

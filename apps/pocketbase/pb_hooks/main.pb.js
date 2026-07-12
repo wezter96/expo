@@ -4,30 +4,74 @@
 // Shared helpers
 // ===========================================================================
 
+function briefFromRecord(u) {
+  return {
+    id: u.id,
+    name: u.getString('name') || u.getString('email') || 'Someone',
+    phone: u.getString('phone') || '',
+    username: u.getString('username') || '',
+    avatar: u.getString('avatar') || '',
+    lastSeen: u.getString('lastSeen') || '',
+    identityKey: u.getString('identityKey') || '',
+    prekeyKey: u.getString('prekeyKey') || '',
+    kemKey: u.getString('kemKey') || '',
+  };
+}
+
 function userBrief(id) {
   try {
-    const u = $app.findRecordById('users', id);
-    return {
-      id: u.id,
-      name: u.getString('name') || u.getString('email') || 'Someone',
-      phone: u.getString('phone') || '',
-      username: u.getString('username') || '',
-      avatar: u.getString('avatar') || '',
-      lastSeen: u.getString('lastSeen') || '',
-      identityKey: u.getString('identityKey') || '',
-      prekeyKey: u.getString('prekeyKey') || '',
-      kemKey: u.getString('kemKey') || '',
-    };
+    return briefFromRecord($app.findRecordById('users', id));
   } catch (_) {
     return { id: id, name: 'Someone', phone: '', username: '', avatar: '', lastSeen: '', identityKey: '', prekeyKey: '', kemKey: '' };
   }
 }
 
-/** Map a conversation record to the shape the app's UI expects. */
-function mapConversation(conv, meId) {
+/** Batch-load user records by id (one query per 50) — avoids N+1 lookups on
+ *  the hot conversations/push paths. Returns a map of id → record. */
+function usersByIds(ids) {
+  const map = {};
+  const uniq = ids.filter((v, i, a) => v && a.indexOf(v) === i);
+  for (let i = 0; i < uniq.length; i += 50) {
+    const chunk = uniq.slice(i, i + 50);
+    const params = {};
+    const parts = chunk.map((id, j) => {
+      params['id' + j] = id;
+      return 'id = {:id' + j + '}';
+    });
+    try {
+      const rows = $app.findRecordsByFilter('users', parts.join(' || '), '', chunk.length, 0, params);
+      for (const r of rows) map[r.id] = r;
+    } catch (_) {}
+  }
+  return map;
+}
+
+/** Page through every record matching a filter (500/batch) so sweeps never
+ *  silently truncate at scale. Capped at maxPages (default 40 → 20k rows);
+ *  logs when the cap is hit so a growing deployment notices. */
+function collectAll(collection, filter, sort, params, maxPages) {
+  const out = [];
+  const pages = maxPages || 40;
+  for (let p = 0; p < pages; p++) {
+    let batch;
+    try {
+      batch = $app.findRecordsByFilter(collection, filter, sort, 500, p * 500, params || {});
+    } catch (_) {
+      break;
+    }
+    for (const r of batch) out.push(r);
+    if (batch.length < 500) return out;
+  }
+  $app.logger().warn('collectAll hit page cap — sweep may be incomplete', 'collection', collection);
+  return out;
+}
+
+/** Map a conversation record to the shape the app's UI expects. `briefs` is an
+ *  optional pre-batched id → brief map (see /api/kinly/conversations). */
+function mapConversation(conv, meId, briefs) {
   const isGroup = conv.getBool('isGroup');
   const memberIds = conv.get('members') || [];
-  const others = memberIds.filter((id) => id !== meId).map((id) => userBrief(id));
+  const others = memberIds.filter((id) => id !== meId).map((id) => (briefs && briefs[id]) || userBrief(id));
   let name;
   let phone = '';
   if (isGroup) {
@@ -241,9 +285,17 @@ routerAdd('GET', '/api/kinly/conversations', (e) => {
   const auth = e.auth;
   if (!auth) return e.json(401, { error: 'Please sign in.' });
   const convs = callerConversations(auth.id);
+  // Batch every other-member lookup into a few queries instead of N+1.
+  const ids = [];
+  for (const c of convs) {
+    for (const id of c.get('members') || []) if (id !== auth.id) ids.push(id);
+  }
+  const recs = usersByIds(ids);
+  const briefs = {};
+  for (const id in recs) briefs[id] = briefFromRecord(recs[id]);
   return e.json(
     200,
-    convs.map((c) => mapConversation(c, auth.id)),
+    convs.map((c) => mapConversation(c, auth.id, briefs)),
   );
 });
 
@@ -259,7 +311,7 @@ function pushOne(token, title, body, data) {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify([{ to: token, title: title, body: body, sound: 'default', data: data || {} }]),
-      timeout: 20,
+      timeout: 5,
     });
   } catch (_) {}
 }
@@ -916,18 +968,17 @@ onRecordAfterCreateSuccess((e) => {
     const body = isGroup ? authorName + ' ' + summary : summary;
 
     // Skip members who muted this conversation (until empty = forever).
+    // One query for all of the conversation's mutes instead of one per member.
     const nowStamp = new Date().toISOString().replace('T', ' ');
+    const muteUntil = {};
+    try {
+      const mrows = $app.findRecordsByFilter('mutes', 'conversation = {:c}', '', 200, 0, { c: conv.id });
+      for (const m of mrows) muteUntil[m.getString('user')] = m.getString('until');
+    } catch (_) {}
     const isMuted = (userId) => {
-      try {
-        const m = $app.findFirstRecordByFilter('mutes', 'conversation = {:c} && user = {:u}', {
-          c: conv.id,
-          u: userId,
-        });
-        const until = m.getString('until');
-        return !until || until > nowStamp;
-      } catch (_) {
-        return false;
-      }
+      const until = muteUntil[userId];
+      if (until === undefined) return false;
+      return !until || until > nowStamp;
     };
 
     // Quiet hours, evaluated in the recipient's own timezone (quietTz is the
@@ -951,15 +1002,13 @@ onRecordAfterCreateSuccess((e) => {
     const mentions = msg.get('mentions') || [];
 
     const memberIds = conv.get('members') || [];
+    // Batch every recipient lookup into one query instead of one per member.
+    const recipientMap = usersByIds(memberIds.filter((id) => id !== authorId));
     const messages = [];
     for (const id of memberIds) {
       if (id === authorId) continue;
-      let recipient;
-      try {
-        recipient = $app.findRecordById('users', id);
-      } catch (_) {
-        continue;
-      }
+      const recipient = recipientMap[id];
+      if (!recipient) continue;
       const mentioned = mentions.indexOf(id) !== -1;
       if (!mentioned && (isMuted(id) || inQuietHours(recipient))) continue;
       const token = recipient.getString('pushToken');
@@ -980,7 +1029,7 @@ onRecordAfterCreateSuccess((e) => {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify(messages),
-        timeout: 20,
+        timeout: 5,
       });
     }
   } catch (err) {
@@ -1035,7 +1084,7 @@ onRecordAfterCreateSuccess((e) => {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify(messages),
-        timeout: 20,
+        timeout: 5,
       });
     }
   } catch (err) {
@@ -1081,9 +1130,9 @@ cronAdd('checkin_sweep', '0 * * * *', () => {
       if (!wardId || !rid || rid === wardId) return;
       (recipients[wardId] = recipients[wardId] || {})[rid] = true;
     };
-    const withCg = $app.findRecordsByFilter('users', "caregiver != ''", '', 1000, 0);
+    const withCg = collectAll('users', "caregiver != ''", '', {});
     for (const u of withCg) add(u.id, u.getString('caregiver'));
-    const gs = $app.findRecordsByFilter('guardianships', "status = 'active'", '', 2000, 0);
+    const gs = collectAll('guardianships', "status = 'active'", '', {});
     for (const g of gs) add(g.getString('ward'), g.getString('guardian'));
 
     const messages = [];
@@ -1116,7 +1165,7 @@ cronAdd('checkin_sweep', '0 * * * *', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify(messages),
-        timeout: 20,
+        timeout: 5,
       });
     }
   } catch (err) {
@@ -1132,12 +1181,10 @@ cronAdd('reminder_sweep', '0 * * * *', () => {
     const now = Date.now();
     const staleCut = new Date(now - 26 * 60 * 60 * 1000).toISOString().replace('T', ' ');
     const alertCut = new Date(now - 20 * 60 * 60 * 1000).toISOString().replace('T', ' ');
-    const due = $app.findRecordsByFilter(
+    const due = collectAll(
       'reminders',
       "kind = 'medication' && enabled = true && notifyCaregiver = true && (lastDoneAt = '' || lastDoneAt < {:s}) && (lastAlertedAt = '' || lastAlertedAt < {:a})",
       '',
-      500,
-      0,
       { s: staleCut, a: alertCut }
     );
     const messages = [];
@@ -1180,7 +1227,7 @@ cronAdd('reminder_sweep', '0 * * * *', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify(messages),
-        timeout: 20,
+        timeout: 5,
       });
     }
   } catch (err) {
@@ -1193,7 +1240,7 @@ cronAdd('reminder_sweep', '0 * * * *', () => {
 cronAdd('scheduled_send', '* * * * *', () => {
   try {
     const now = new Date().toISOString().replace('T', ' ');
-    const due = $app.findRecordsByFilter('scheduled_messages', 'sendAt <= {:t}', 'sendAt', 200, 0, { t: now });
+    const due = collectAll('scheduled_messages', 'sendAt <= {:t}', 'sendAt', { t: now });
     if (!due.length) return;
     const msgCol = $app.findCollectionByNameOrId('messages');
     for (const s of due) {
@@ -1221,24 +1268,29 @@ cronAdd('scheduled_send', '* * * * *', () => {
 
 cronAdd('disappearing_sweep', '*/15 * * * *', () => {
   try {
-    const convs = $app.findRecordsByFilter('conversations', 'disappearTimer > 0', '', 1000, 0);
+    const convs = collectAll('conversations', 'disappearTimer > 0', '', {});
     const now = Date.now();
     for (const c of convs) {
       const secs = c.getInt('disappearTimer');
       if (!secs) continue;
       const cutoff = new Date(now - secs * 1000).toISOString().replace('T', ' ');
-      const old = $app.findRecordsByFilter(
-        'messages',
-        'conversation = {:c} && created < {:t}',
-        'created',
-        500,
-        0,
-        { c: c.id, t: cutoff },
-      );
-      for (const m of old) {
-        try {
-          $app.delete(m);
-        } catch (_) {}
+      // Drain in batches until nothing old remains (deleting shifts pages, so
+      // always re-fetch page 1; bounded to avoid a runaway loop).
+      for (let round = 0; round < 40; round++) {
+        const old = $app.findRecordsByFilter(
+          'messages',
+          'conversation = {:c} && created < {:t}',
+          'created',
+          500,
+          0,
+          { c: c.id, t: cutoff },
+        );
+        for (const m of old) {
+          try {
+            $app.delete(m);
+          } catch (_) {}
+        }
+        if (old.length < 500) break;
       }
     }
   } catch (err) {
