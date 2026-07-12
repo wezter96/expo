@@ -21,7 +21,7 @@ export default function Saved() {
   const items = savedMessages();
 
   const preview = (kind: string, text: string) =>
-    kind === 'photo' ? '📷 Photo' : kind === 'voice' ? '🎤 Voice message' : text;
+    kind === 'photo' ? '📷 Photo' : kind === 'voice' ? '🎤 Voice message' : kind === 'video' ? '🎬 Video' : text;
 
   if (items.length === 0) {
     return (

@@ -145,6 +145,7 @@ function toMessage(r: RecordModel, meId: string | null): Message {
     kind,
     imageUrl: r.image ? fileUrl('messages', r.id, r.image as string) : undefined,
     audioUrl: r.audio ? fileUrl('messages', r.id, r.audio as string) : undefined,
+    videoUrl: r.video ? fileUrl('messages', r.id, r.video as string) : undefined,
     duration: typeof r.duration === 'number' ? (r.duration as number) : undefined,
     mine: !!meId && r.author === meId,
     authorId: r.author as string,
@@ -900,6 +901,39 @@ export async function pushPhoto(id: string, contactId: string, uri: string, capt
       form.append('conversation', contactId);
       form.append('author', author);
       form.append('kind', 'photo');
+      form.append('text', caption.trim());
+      await pb.collection('messages').create(form);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Send a short video clip. Encrypted when the conversation has E2EE keys. */
+export async function pushVideo(id: string, contactId: string, uri: string, caption = ''): Promise<boolean> {
+  if (!pb || !pb.authStore.record) return false;
+  try {
+    const author = pb.authStore.record.id;
+    const ck = await ensureConvKey(contactId);
+    if (ck) {
+      const { encUri, keyB64 } = await e2ee.encryptFileToTemp(uri);
+      const form = fileField(encUri, 'video', 'video.enc', 'application/octet-stream');
+      form.append('id', id);
+      form.append('conversation', contactId);
+      form.append('author', author);
+      form.append('kind', 'video');
+      form.append('enc', 'true');
+      form.append('text', '');
+      form.append('keyEpoch', String(ck.epoch));
+      form.append('cipher', e2ee.sealPayload(ck.key, { t: caption.trim(), m: { key: keyB64, kind: 'video' } }));
+      await pb.collection('messages').create(form);
+    } else {
+      const form = fileField(uri, 'video', 'video.mp4', 'video/mp4');
+      form.append('id', id);
+      form.append('conversation', contactId);
+      form.append('author', author);
+      form.append('kind', 'video');
       form.append('text', caption.trim());
       await pb.collection('messages').create(form);
     }

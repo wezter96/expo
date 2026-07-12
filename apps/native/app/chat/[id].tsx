@@ -1,15 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Speech from 'expo-speech';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { VideoBubble } from '../../src/components/VideoBubble';
 import { VoicePlayer } from '../../src/components/VoicePlayer';
 import {
   Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -54,6 +57,8 @@ import { useTheme } from '../../src/theme-context';
 
 const EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
 const URL_RE = /(https?:\/\/|www\.)\S+/i;
+// Shared-location messages carry a maps link; the bubble shows an Open-map button.
+const MAPS_RE = /https:\/\/maps\.google\.com\/\?q=(-?[0-9.]+),(-?[0-9.]+)/;
 // A typing row older than this counts as "stopped"; we re-ping every 3s while
 // the user is actively typing so it stays fresh.
 const TYPING_TTL = 6000;
@@ -98,6 +103,7 @@ export default function Chat() {
     editMessage,
     sendPhoto,
     sendVoice,
+    sendVideo,
     retryMessage,
     deleteMessage,
     markRead,
@@ -332,7 +338,7 @@ export default function Chat() {
 
   // Preview text for a quoted/replied message.
   const previewOf = (m: Message | undefined): string =>
-    !m ? '' : m.kind === 'photo' ? '📷 Photo' : m.kind === 'voice' ? '🎤 Voice message' : m.text;
+    !m ? '' : m.kind === 'photo' ? '📷 Photo' : m.kind === 'voice' ? '🎤 Voice message' : m.kind === 'video' ? '🎬 Video' : m.text;
 
   async function pickPhoto(source: 'camera' | 'library') {
     const perm =
@@ -350,11 +356,39 @@ export default function Chat() {
     if (!result.canceled && result.assets[0]) sendPhoto(contact!.id, result.assets[0].uri);
   }
 
+  async function pickVideo() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Please allow access to send a video.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], videoMaxDuration: 60 });
+    if (!result.canceled && result.assets[0]) sendVideo(contact!.id, result.assets[0].uri);
+  }
+
+  async function shareLocation() {
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(t('chat.shareLocation'), t('chat.locationDenied'));
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const lat = pos.coords.latitude.toFixed(5);
+      const lng = pos.coords.longitude.toFixed(5);
+      sendMessage(contact!.id, `📍 ${t('chat.myLocation')}: https://maps.google.com/?q=${lat},${lng}`);
+    } catch {
+      Alert.alert(t('chat.shareLocation'), t('chat.locationError'));
+    }
+  }
+
   function attachPhoto() {
-    Alert.alert('Send a photo', 'Where from?', [
-      { text: 'Take a photo', onPress: () => pickPhoto('camera') },
-      { text: 'Choose from library', onPress: () => pickPhoto('library') },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('chat.attachTitle'), undefined, [
+      { text: t('chat.takePhoto'), onPress: () => pickPhoto('camera') },
+      { text: t('chat.choosePhoto'), onPress: () => pickPhoto('library') },
+      { text: t('chat.chooseVideo'), onPress: () => void pickVideo() },
+      { text: t('chat.shareLocation'), onPress: () => void shareLocation() },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   }
 
@@ -1072,12 +1106,15 @@ function Bubble({
   mentionNames?: string[];
 }) {
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const mine = message.mine;
-  const hasLink = !mine && URL_RE.test(message.text);
+  const mapMatch = message.text ? MAPS_RE.exec(message.text) : null;
+  const hasLink = !mine && !mapMatch && URL_RE.test(message.text);
   // For encrypted media, download+decrypt to a local file; else pass through.
   const photoUri = useDisplayUri(message.kind === 'photo' ? message.imageUrl : undefined, message.mediaKey, 'jpg');
   const audioUri = useDisplayUri(message.kind === 'voice' ? message.audioUrl : undefined, message.mediaKey, 'm4a');
+  const videoUri = useDisplayUri(message.kind === 'video' ? message.videoUrl : undefined, message.mediaKey, 'mp4');
   return (
     <View
       style={[
@@ -1129,10 +1166,24 @@ function Bubble({
           <VoicePlayer uri={audioUri} mine={mine} duration={message.duration} />
         ) : null}
 
+        {message.kind === 'video' ? <VideoBubble uri={videoUri} /> : null}
+
         {message.text ? (
           <Text style={[styles.bubbleText, mine ? styles.textMine : styles.textTheirs]}>
             {renderWithMentions(message.text, mentionNames, [styles.mention, mine ? styles.textMine : null])}
           </Text>
+        ) : null}
+
+        {mapMatch ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.openMap')}
+            onPress={() => void Linking.openURL(mapMatch[0]).catch(() => {})}
+            style={({ pressed }) => [styles.mapBtn, pressed && styles.pressed]}
+          >
+            <Ionicons name="map" size={20} color={mine ? colors.textOnDark : colors.primary} />
+            <Text style={[styles.mapBtnText, mine && styles.textMine]}>{t('chat.openMap')}</Text>
+          </Pressable>
         ) : null}
 
         {hasLink ? (
@@ -1289,6 +1340,19 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     borderColor: colors.danger,
   },
   requestBlockText: { fontSize: fonts.body, fontWeight: '800', color: colors.danger },
+  mapBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: 'rgba(128,128,128,0.35)',
+  },
+  mapBtnText: { fontSize: fonts.body, fontWeight: '800', color: colors.primary },
   encNote: {
     flexDirection: 'row',
     alignItems: 'center',

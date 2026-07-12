@@ -273,7 +273,9 @@ export default function Messages() {
               ? '📷 Photo'
               : last.kind === 'voice'
                 ? '🎤 Voice message'
-                : last.text
+                : last.kind === 'video'
+                  ? '🎬 Video'
+                  : last.text
             : '';
           return (
             <View key={contact.id} style={styles.row}>

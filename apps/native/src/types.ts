@@ -23,7 +23,7 @@ export type Contact = {
   accepted?: string[];
 };
 
-export type MessageKind = 'text' | 'photo' | 'voice';
+export type MessageKind = 'text' | 'photo' | 'voice' | 'video';
 
 export type Message = {
   id: string;
@@ -34,6 +34,8 @@ export type Message = {
   imageUrl?: string;
   /** Audio URL (kind === 'voice'). */
   audioUrl?: string;
+  /** Video URL (kind === 'video'). */
+  videoUrl?: string;
   /** Voice message length in seconds. */
   duration?: number;
   /** true = sent by the app's user, false = received. */

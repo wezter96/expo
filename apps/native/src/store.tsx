@@ -10,6 +10,7 @@ import {
   newId,
   pushMessage,
   pushPhoto,
+  pushVideo,
   pushVoice,
   reportUser,
   serverEnabled,
@@ -47,6 +48,7 @@ type Store = {
   editMessage: (id: string, contactId: string, text: string) => void;
   sendPhoto: (contactId: string, uri: string, caption?: string) => void;
   sendVoice: (contactId: string, uri: string, duration: number) => void;
+  sendVideo: (contactId: string, uri: string, caption?: string) => void;
   /** Retry a message that failed to send. */
   retryMessage: (id: string) => void;
   /** Delete (unsend) one of my own messages for everyone. */
@@ -475,6 +477,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [dispatchSend]
   );
 
+  const sendVideo = useCallback(
+    (contactId: string, uri: string, caption = '') => {
+      dispatchSend(contactId, { text: caption, kind: 'video', videoUrl: uri }, (id) =>
+        pushVideo(id, contactId, uri, caption)
+      );
+    },
+    [dispatchSend]
+  );
+
   const retryMessage = useCallback(
     (id: string) => {
       if (!(online && uid)) return;
@@ -486,7 +497,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ? pushPhoto(id, m.contactId, m.imageUrl, m.text)
           : m.kind === 'voice' && m.audioUrl
             ? pushVoice(id, m.contactId, m.audioUrl, m.duration ?? 0)
-            : pushMessage(id, m.contactId, m.text);
+            : m.kind === 'video' && m.videoUrl
+              ? pushVideo(id, m.contactId, m.videoUrl, m.text)
+              : pushMessage(id, m.contactId, m.text);
       push.then((ok) => {
         if (!ok) setMessageStatus(id, 'failed');
       });
@@ -583,6 +596,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     editMessage,
     sendPhoto,
     sendVoice,
+    sendVideo,
     retryMessage,
     deleteMessage,
     receiveMessage,

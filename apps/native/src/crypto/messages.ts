@@ -6,7 +6,7 @@
  */
 import { aeadDecrypt, aeadEncrypt, randomBytes, utf8 } from './primitives';
 
-export type MediaRef = { key: string; kind: 'photo' | 'voice'; duration?: number };
+export type MediaRef = { key: string; kind: 'photo' | 'voice' | 'video'; duration?: number };
 /** The plaintext of a message before it's encrypted. */
 export type MessagePayload = { t: string; m?: MediaRef };
 

@@ -168,8 +168,13 @@ migrate(
         { type: 'bool', name: 'enc' },
         { type: 'text', name: 'cipher', max: 30000 },
         { type: 'number', name: 'keyEpoch', min: 0 },
-        { type: 'file', name: 'image', maxSelect: 1, maxSize: 10485760, mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] },
-        { type: 'file', name: 'audio', maxSelect: 1, maxSize: 10485760, mimeTypes: ['audio/mp4', 'audio/m4a', 'audio/mpeg', 'audio/aac', 'audio/webm'] },
+        // No mimeTypes restriction: E2EE media uploads are encrypted blobs
+        // (application/octet-stream), which a mime allowlist would reject.
+        { type: 'file', name: 'image', maxSelect: 1, maxSize: 10485760 },
+        { type: 'file', name: 'audio', maxSelect: 1, maxSize: 10485760 },
+        // short video clips (≤ 60s enforced by the picker; encrypted blobs pass
+        // as octet-stream, so mime types are not restricted here)
+        { type: 'file', name: 'video', maxSelect: 1, maxSize: 52428800 },
         // voice message length in seconds
         { type: 'number', name: 'duration' },
         { type: 'autodate', name: 'created', onCreate: true },
