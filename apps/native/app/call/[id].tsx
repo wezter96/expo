@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   title: { fontSize: fonts.title, fontWeight: '800', color: colors.textOnDark, textAlign: 'center' },
-  text: { fontSize: fonts.body, color: '#D6E5F5', textAlign: 'center', lineHeight: fonts.body + 8 },
+  text: { fontSize: fonts.body, color: '#CFE8DA', textAlign: 'center', lineHeight: fonts.body + 8 },
   button: {
     marginTop: spacing.lg,
     backgroundColor: colors.primary,

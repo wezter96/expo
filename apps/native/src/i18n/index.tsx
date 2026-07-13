@@ -306,6 +306,20 @@ const en: Record<string, string> = {
   'display.dark': 'Dark',
   'display.auto': 'Automatic',
   'display.langSystem': 'Phone language',
+  'display.appStyle': 'App style',
+  'display.styleModern': 'Modern',
+  'display.styleModernHint': 'Sleek and compact, with a full chat list.',
+  'display.styleEasy': 'Easy',
+  'display.styleEasyHint': 'Extra large and extra clear, with big buttons for your favorite people.',
+
+  'onboarding.fit.title': 'Make Kinly yours',
+  'onboarding.fit.body': 'How old are you? We\u2019ll suggest the look that fits you best.',
+  'onboarding.fit.under40': 'Under 40',
+  'onboarding.fit.mid': '40\u201364',
+  'onboarding.fit.senior': '65 or over',
+  'onboarding.fit.recommended': 'Recommended',
+  'onboarding.fit.note': 'You can change this any time in Settings \u2192 Display.',
+
   'display.simpleMode': 'Simple mode',
   'display.simpleModeHint': 'Home shows only big buttons for your favorite people.',
 };
@@ -605,6 +619,20 @@ const sv: Record<string, string> = {
   'display.dark': 'Mörkt',
   'display.auto': 'Automatiskt',
   'display.langSystem': 'Telefonens språk',
+  'display.appStyle': 'Appens utseende',
+  'display.styleModern': 'Modern',
+  'display.styleModernHint': 'Elegant och kompakt, med full chattlista.',
+  'display.styleEasy': 'Enkel',
+  'display.styleEasyHint': 'Extra stort och extra tydligt, med stora knappar f\u00f6r dina favoritpersoner.',
+
+  'onboarding.fit.title': 'G\u00f6r Kinly till din',
+  'onboarding.fit.body': 'Hur gammal \u00e4r du? Vi f\u00f6resl\u00e5r utseendet som passar dig b\u00e4st.',
+  'onboarding.fit.under40': 'Under 40',
+  'onboarding.fit.mid': '40\u201364',
+  'onboarding.fit.senior': '65 eller \u00e4ldre',
+  'onboarding.fit.recommended': 'Rekommenderas',
+  'onboarding.fit.note': 'Du kan \u00e4ndra detta n\u00e4r som helst under Inst\u00e4llningar \u2192 Sk\u00e4rm.',
+
   'display.simpleMode': 'Enkelt läge',
   'display.simpleModeHint': 'Hemskärmen visar bara stora knappar för dina favoritpersoner.',
 };

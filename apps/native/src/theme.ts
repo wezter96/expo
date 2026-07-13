@@ -1,11 +1,20 @@
 /**
- * Kinly design tokens — the "Serene Connect" system.
+ * Kinly design tokens — the "Evergreen" system.
  *
  * Personality: reliability, warmth, clarity, tuned for intergenerational use.
- * Deep Trust Blue primary on Warm Cloud White, high-contrast text, generous
+ * Deep Evergreen primary on warm paper white, high-contrast text, generous
  * spacing, and the Atkinson Hyperlegible typeface (designed for low vision).
+ *
+ * Two UI styles share the same hue family and differ in *presence*:
+ *  - 'normal' ("Modern"): quiet, refined — subtle borders that read as
+ *    hairlines, softer muted tones, slightly compact type.
+ *  - 'simple' ("Easy"): the chunky, high-contrast look — strong outlines,
+ *    darker secondary text, slightly larger type. Recommended for 65+.
+ *
  * See DESIGN.md. Colors/fonts are theme-aware via ThemeProvider / useTheme.
  */
+
+export type UiStyle = 'normal' | 'simple';
 
 export type Colors = {
   primary: string;
@@ -23,39 +32,77 @@ export type Colors = {
   border: string;
 };
 
-// Light — Serene Connect
-export const lightColors: Colors = {
-  primary: '#1A4B84', // Deep Trust Blue
-  primaryDark: '#003466',
-  accent: '#059669', // emerald — confirm / accept / send
-  background: '#F8F9FA', // Warm Cloud White (surface)
-  card: '#FFFFFF', // surface-container-lowest
-  bubbleMine: '#1A4B84',
-  bubbleTheirs: '#E8F0F8', // soft blue tint (secondary)
-  text: '#191C1D', // on-surface
+// Light — shared Evergreen hues; per-style contrast treatment below.
+const lightBase = {
+  primary: '#1A5D43', // Deep Evergreen
+  primaryDark: '#0C3D2A',
+  accent: '#0E8A5F', // confirm / accept / send
+  card: '#FFFFFF',
+  bubbleMine: '#1A5D43',
+  text: '#171D19',
   textOnDark: '#FFFFFF',
-  textMuted: '#424750', // on-surface-variant
-  danger: '#BA1A1A', // error
-  warning: '#D97706', // warm amber accent
-  border: '#C3C6D1', // outline-variant
+  danger: '#BA1A1A',
+  warning: '#D97706',
 };
 
-// Dark — derived to keep the same hues with calm, low-glare surfaces
-export const darkColors: Colors = {
-  primary: '#5A9BE8',
-  primaryDark: '#0B3C66',
-  accent: '#2FB673',
-  background: '#0F1620',
-  card: '#1A2430',
-  bubbleMine: '#1E4E86',
-  bubbleTheirs: '#233140',
-  text: '#EDEEF0',
+const lightByStyle: Record<UiStyle, Colors> = {
+  normal: {
+    ...lightBase,
+    background: '#F6F7F5', // warm paper
+    bubbleTheirs: '#EEF3EF',
+    textMuted: '#5C6A61',
+    border: '#E4E9E4', // whisper outline — cards read as soft surfaces
+  },
+  simple: {
+    ...lightBase,
+    background: '#F4F6F4',
+    bubbleTheirs: '#E4EEE7',
+    textMuted: '#3F4C44', // darker for stronger contrast
+    border: '#AEBFB4', // strong outline — everything clearly delineated
+  },
+};
+
+// Dark — calm, low-glare surfaces with the same treatment split.
+const darkBase = {
+  // Mid evergreen: light enough to read as a tint on dark surfaces, dark
+  // enough to carry white text when used as a header/button background.
+  primary: '#2E9E6B',
+  primaryDark: '#0C3D2A',
+  accent: '#2FA874',
+  bubbleMine: '#1F5B41',
+  text: '#E9EEE9',
   textOnDark: '#FFFFFF',
-  textMuted: '#A9B6C6',
   danger: '#E0655A',
   warning: '#E0A040',
-  border: '#33455A',
 };
+
+const darkByStyle: Record<UiStyle, Colors> = {
+  normal: {
+    ...darkBase,
+    background: '#0D1410',
+    card: '#161E18',
+    bubbleTheirs: '#1D2822',
+    textMuted: '#98A89D',
+    border: '#26312A',
+  },
+  simple: {
+    ...darkBase,
+    background: '#0F1512',
+    card: '#1A241D',
+    bubbleTheirs: '#243129',
+    textMuted: '#B4C2B8',
+    border: '#465A4E',
+  },
+};
+
+/** The palette for a theme + UI-style combination. */
+export function colorsFor(dark: boolean, style: UiStyle): Colors {
+  return (dark ? darkByStyle : lightByStyle)[style];
+}
+
+// Back-compat aliases (the chunky "simple" treatment, the original default).
+export const lightColors: Colors = lightByStyle.simple;
+export const darkColors: Colors = darkByStyle.simple;
 
 export type Fonts = {
   huge: number;
@@ -78,6 +125,9 @@ export const fontFamily = {
 /** Text size options. */
 export type TextSize = 'normal' | 'large' | 'xlarge';
 export const TEXT_SCALES: Record<TextSize, number> = { normal: 1, large: 1.15, xlarge: 1.3 };
+
+/** Per-style type density: Modern sits slightly compact, Easy slightly larger. */
+export const STYLE_FONT_FACTOR: Record<UiStyle, number> = { normal: 0.95, simple: 1.05 };
 
 export function scaledFonts(scale: number): Fonts {
   return {
@@ -110,12 +160,12 @@ export const TAP_TARGET = 64;
 export const UNREAD_BADGE = '#047857'; // white text ≈ 5.5:1
 
 export const avatarColors = [
-  '#1A4B84',
-  '#059669',
+  '#1A5D43',
+  '#0E7490',
   '#D97706',
   '#7D3C98',
   '#BA1A1A',
-  '#0E7490',
+  '#166E9C',
   '#B45309',
   '#334155',
 ];
@@ -123,12 +173,12 @@ export const avatarColors = [
 // Brighter variants for use as *text* on dark surfaces, where the avatar
 // colors above are too dark to read. Same order/index as avatarColors.
 const nameColorsDark = [
-  '#7FB0EE',
-  '#4ECB8E',
+  '#5FCF9B',
+  '#4FC3D6',
   '#F0B44E',
   '#C79BE6',
   '#F0897F',
-  '#4FC3D6',
+  '#6FB8E8',
   '#E0A55E',
   '#A9B6C6',
 ];

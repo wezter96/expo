@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   title: { fontSize: fonts.title, fontWeight: '800', color: colors.textOnDark, textAlign: 'center' },
-  body: { fontSize: fonts.body, color: '#D6E5F5', textAlign: 'center', lineHeight: fonts.body + 8 },
+  body: { fontSize: fonts.body, color: '#CFE8DA', textAlign: 'center', lineHeight: fonts.body + 8 },
   leave: {
     marginTop: spacing.lg,
     flexDirection: 'row',

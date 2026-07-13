@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.primaryDark, alignItems: 'center', justifyContent: 'space-between', paddingVertical: 90 },
   info: { alignItems: 'center', gap: spacing.md, marginTop: spacing.xl },
   name: { fontSize: fonts.huge, fontWeight: '800', color: colors.textOnDark, textAlign: 'center' },
-  sub: { fontSize: fonts.body, color: '#D6E5F5' },
+  sub: { fontSize: fonts.body, color: '#CFE8DA' },
   actions: { flexDirection: 'row', gap: spacing.xl * 2 },
   action: { alignItems: 'center', gap: spacing.sm },
   circle: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center' },

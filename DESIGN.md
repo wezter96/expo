@@ -1,4 +1,18 @@
-# Kinly Design System — "Serene Connect"
+# Kinly Design System — "Evergreen"
+
+> **Rebrand note:** the system began as "Serene Connect" (Deep Trust Blue
+> `#1A4B84`). It is now **Evergreen**: Deep Evergreen `#1A5D43` primary, and
+> the palette ships in **two UI styles**, chosen at onboarding by age and
+> changeable in Settings → Display:
+> - **Modern** (`uiStyle: 'normal'`) — whisper borders, softer muted tones,
+>   slightly compact type, full chat list.
+> - **Easy** (`uiStyle: 'simple'`) — strong outlines, darker secondary text,
+>   slightly larger type, big favorite-people tiles on the home screen.
+>   Recommended for 65+.
+>
+> See `colorsFor(dark, style)` and `STYLE_FONT_FACTOR` in `theme.ts`. Color
+> references below predate the rebrand; the hue guidance still applies with
+> blue swapped for evergreen.
 
 Kinly is a family messaging app built for **intergenerational use** — it has to
 work as well for a 78-year-old with low vision and shaky hands as it does for

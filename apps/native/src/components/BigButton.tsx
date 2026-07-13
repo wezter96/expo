@@ -28,7 +28,7 @@ export function BigButton({
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const VARIANTS = {
-    primary: { bg: colors.primary, fg: colors.textOnDark, sub: '#D6E5F5' },
+    primary: { bg: colors.primary, fg: colors.textOnDark, sub: '#CFE8DA' },
     success: { bg: colors.accent, fg: colors.textOnDark, sub: '#D6F0DF' },
     danger: { bg: colors.danger, fg: colors.textOnDark, sub: '#F5D6D2' },
     neutral: { bg: colors.card, fg: colors.text, sub: colors.textMuted },

@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type LangPref, useTranslation } from '../src/i18n';
 import { useStore } from '../src/store';
-import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../src/theme';
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET, type UiStyle } from '../src/theme';
 import { type ThemeMode, useTheme } from '../src/theme-context';
 import { type TextSize } from '../src/theme';
 
@@ -26,15 +26,50 @@ const LANGS: { key: LangPref; label: string; icon: keyof typeof Ionicons.glyphMa
   { key: 'sv', label: 'Svenska', icon: 'globe' },
 ];
 
+const STYLES: { key: UiStyle; labelKey: string; hintKey: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'normal', labelKey: 'display.styleModern', hintKey: 'display.styleModernHint', icon: 'sparkles-outline' },
+  { key: 'simple', labelKey: 'display.styleEasy', hintKey: 'display.styleEasyHint', icon: 'grid' },
+];
+
 export default function Display() {
   const insets = useSafeAreaInsets();
-  const { colors, fonts, mode, setMode, textSize, setTextSize } = useTheme();
+  const { colors, fonts, mode, setMode, textSize, setTextSize, uiStyle, setUiStyle } = useTheme();
   const { t, pref, setPref } = useTranslation();
-  const { simpleMode, setSimpleMode } = useStore();
+  const { setSimpleMode } = useStore();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+
+  // One choice drives both the visual treatment and the tile home screen.
+  const pickStyle = (s: UiStyle) => {
+    setUiStyle(s);
+    setSimpleMode(s === 'simple');
+  };
 
   return (
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
+      <Text style={styles.label}>{t('display.appStyle')}</Text>
+      <View style={styles.card}>
+        {STYLES.map((s, i) => (
+          <Pressable
+            key={s.key}
+            accessibilityRole="button"
+            accessibilityState={{ selected: uiStyle === s.key }}
+            onPress={() => pickStyle(s.key)}
+            style={[styles.row, i > 0 && styles.divider]}
+          >
+            <Ionicons name={s.icon} size={26} color={colors.primary} />
+            <View style={styles.rowGrow}>
+              <Text style={styles.rowLabel}>{t(s.labelKey)}</Text>
+              <Text style={styles.rowHint}>{t(s.hintKey)}</Text>
+            </View>
+            <Ionicons
+              name={uiStyle === s.key ? 'radio-button-on' : 'radio-button-off'}
+              size={30}
+              color={uiStyle === s.key ? colors.primary : colors.border}
+            />
+          </Pressable>
+        ))}
+      </View>
+
       <Text style={styles.label}>{t('display.textSize')}</Text>
       <View style={styles.card}>
         {SIZES.map((s, i) => (
@@ -76,18 +111,6 @@ export default function Display() {
             />
           </Pressable>
         ))}
-      </View>
-
-      <Text style={styles.label}>{t('display.simpleMode')}</Text>
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <Ionicons name="grid" size={26} color={colors.primary} />
-          <View style={styles.rowGrow}>
-            <Text style={styles.rowLabel}>{t('display.simpleMode')}</Text>
-            <Text style={styles.rowHint}>{t('display.simpleModeHint')}</Text>
-          </View>
-          <Switch value={simpleMode} onValueChange={setSimpleMode} />
-        </View>
       </View>
 
       <Text style={styles.label}>{t('display.language')}</Text>

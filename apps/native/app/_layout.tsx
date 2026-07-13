@@ -110,8 +110,8 @@ export default function RootLayout() {
   if (!fontsLoaded) {
     // Brief splash while the legibility typeface loads.
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8F9FA' }}>
-        <ActivityIndicator size="large" color="#1A4B84" />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F6F7F5' }}>
+        <ActivityIndicator size="large" color="#1A5D43" />
       </View>
     );
   }

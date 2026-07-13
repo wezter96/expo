@@ -4,7 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '../i18n';
-import { type Colors, type Fonts, radius, spacing, TAP_TARGET } from '../theme';
+import { useStore } from '../store';
+import { type Colors, type Fonts, radius, spacing, TAP_TARGET, type UiStyle } from '../theme';
 import { useTheme } from '../theme-context';
 
 const KEY = 'kinly.onboarded.v1';
@@ -17,14 +18,21 @@ const SLIDES: Slide[] = [
   { icon: 'lock-closed', key: 'private' },
 ];
 
-/** First-run welcome flow. Renders nothing once the user has finished it. */
+type AgeBand = 'under40' | 'mid' | 'senior';
+const AGES: AgeBand[] = ['under40', 'mid', 'senior'];
+
+/** First-run welcome flow: intro slides, then an age question that recommends
+ *  the Modern or Easy look. Renders nothing once the user has finished it. */
 export function Onboarding() {
   const insets = useSafeAreaInsets();
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, setUiStyle, setTextSize } = useTheme();
+  const { setSimpleMode } = useStore();
   const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [done, setDone] = useState<boolean | null>(null);
   const [page, setPage] = useState(0);
+  const [choosing, setChoosing] = useState(false);
+  const [age, setAge] = useState<AgeBand | null>(null);
   const scroller = useRef<ScrollView>(null);
   const width = Dimensions.get('window').width;
 
@@ -41,8 +49,18 @@ export function Onboarding() {
     AsyncStorage.setItem(KEY, '1').catch(() => {});
   };
 
+  const recommended: UiStyle | null = age ? (age === 'senior' ? 'simple' : 'normal') : null;
+
+  const applyStyle = (style: UiStyle) => {
+    setUiStyle(style);
+    setSimpleMode(style === 'simple');
+    // 65+ also starts with larger text — adjustable any time in Display.
+    if (style === 'simple' && age === 'senior') setTextSize('large');
+    finish();
+  };
+
   const next = () => {
-    if (page >= SLIDES.length - 1) return finish();
+    if (page >= SLIDES.length - 1) return setChoosing(true);
     const p = page + 1;
     setPage(p);
     scroller.current?.scrollTo({ x: p * width, animated: true });
@@ -52,9 +70,64 @@ export function Onboarding() {
     setPage(Math.round(e.nativeEvent.contentOffset.x / width));
   };
 
+  if (choosing) {
+    return (
+      <View style={[styles.cover, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.lg }]}>
+        <View style={styles.fitWrap}>
+          <Text style={styles.title}>{t('onboarding.fit.title')}</Text>
+          <Text style={styles.body}>{t('onboarding.fit.body')}</Text>
+
+          <View style={styles.ageRow}>
+            {AGES.map((a) => (
+              <Pressable
+                key={a}
+                accessibilityRole="button"
+                accessibilityState={{ selected: age === a }}
+                onPress={() => setAge(a)}
+                style={[styles.ageChip, age === a && styles.ageChipOn]}
+              >
+                <Text style={[styles.ageText, age === a && styles.ageTextOn]}>{t(`onboarding.fit.${a}`)}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {(['normal', 'simple'] as UiStyle[]).map((s) => (
+            <Pressable
+              key={s}
+              accessibilityRole="button"
+              accessibilityLabel={t(s === 'normal' ? 'display.styleModern' : 'display.styleEasy')}
+              onPress={() => applyStyle(s)}
+              style={({ pressed }) => [
+                styles.styleCard,
+                recommended === s && styles.styleCardRec,
+                pressed && styles.dim,
+              ]}
+            >
+              <Ionicons name={s === 'normal' ? 'sparkles-outline' : 'grid'} size={34} color={colors.primary} />
+              <View style={styles.styleText}>
+                <View style={styles.styleHead}>
+                  <Text style={styles.styleTitle}>{t(s === 'normal' ? 'display.styleModern' : 'display.styleEasy')}</Text>
+                  {recommended === s ? (
+                    <Text style={styles.recBadge}>{t('onboarding.fit.recommended')}</Text>
+                  ) : null}
+                </View>
+                <Text style={styles.styleHint}>
+                  {t(s === 'normal' ? 'display.styleModernHint' : 'display.styleEasyHint')}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={26} color={colors.textMuted} />
+            </Pressable>
+          ))}
+
+          <Text style={styles.fitNote}>{t('onboarding.fit.note')}</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.cover, { paddingTop: insets.top, paddingBottom: insets.bottom + spacing.lg }]}>
-      <Pressable accessibilityRole="button" onPress={finish} style={styles.skip} hitSlop={10}>
+      <Pressable accessibilityRole="button" onPress={() => setChoosing(true)} style={styles.skip} hitSlop={10}>
         <Text style={styles.skipText}>{t('common.skip')}</Text>
       </Pressable>
 
@@ -123,5 +196,48 @@ function makeStyles(colors: Colors, fonts: Fonts) {
     },
     buttonText: { fontSize: fonts.button, fontWeight: '800', color: colors.textOnDark },
     dim: { opacity: 0.85 },
+
+    fitWrap: { flex: 1, paddingHorizontal: spacing.lg, gap: spacing.md },
+    ageRow: { flexDirection: 'row', gap: spacing.sm, marginVertical: spacing.sm },
+    ageChip: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: TAP_TARGET - 8,
+      borderRadius: radius.pill,
+      borderWidth: 2,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+    },
+    ageChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+    ageText: { fontSize: fonts.small + 1, fontWeight: '800', color: colors.text },
+    ageTextOn: { color: colors.textOnDark },
+    styleCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+      minHeight: TAP_TARGET + 24,
+      borderRadius: radius.lg,
+      borderWidth: 2,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+    },
+    styleCardRec: { borderColor: colors.accent },
+    styleText: { flex: 1 },
+    styleHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    styleTitle: { fontSize: fonts.title, fontWeight: '800', color: colors.text },
+    recBadge: {
+      fontSize: fonts.small - 2,
+      fontWeight: '800',
+      color: colors.textOnDark,
+      backgroundColor: colors.accent,
+      borderRadius: radius.pill,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+      overflow: 'hidden',
+    },
+    styleHint: { fontSize: fonts.small, color: colors.textMuted, marginTop: 2 },
+    fitNote: { fontSize: fonts.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm },
   });
 }

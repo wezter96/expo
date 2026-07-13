@@ -1217,12 +1217,12 @@ function Bubble({
 
         <View style={styles.bubbleFooter}>
           {mine && message.status === 'sending' ? (
-            <Ionicons name="time-outline" size={16} color="#D6E5F5" />
+            <Ionicons name="time-outline" size={16} color="#CFE8DA" />
           ) : mine && message.status !== 'failed' ? (
             <Ionicons
               name={tick === 'sent' || !tick ? 'checkmark' : 'checkmark-done'}
               size={16}
-              color={tick === 'seen' ? '#7FE3C0' : '#D6E5F5'}
+              color={tick === 'seen' ? '#FFE18A' : '#CFE8DA'}
             />
           ) : null}
           <Text style={[styles.time, mine ? styles.timeMine : styles.timeTheirs]}>
@@ -1230,7 +1230,7 @@ function Bubble({
             {message.edited ? ' · edited' : ''}
           </Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Reply to this message" onPress={onReply} hitSlop={10}>
-            <Ionicons name="arrow-undo" size={20} color={mine ? '#D6E5F5' : colors.primary} />
+            <Ionicons name="arrow-undo" size={20} color={mine ? '#CFE8DA' : colors.primary} />
           </Pressable>
           {!mine && (
             <>
@@ -1295,7 +1295,7 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   // truncates instead of colliding with the action icons (even at XL text).
   headerTitle: { alignItems: 'flex-start', maxWidth: 200 },
   headerName: { color: colors.textOnDark, fontSize: 22, fontWeight: '800' },
-  headerPresence: { color: '#D6E5F5', fontSize: 13, fontWeight: '600' },
+  headerPresence: { color: '#CFE8DA', fontSize: 13, fontWeight: '600' },
   seen: { alignSelf: 'flex-end', fontSize: fonts.small - 2, color: colors.textMuted, fontWeight: '700', marginTop: 2 },
   disappearNote: {
     flexDirection: 'row',
@@ -1449,7 +1449,7 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   bubbleTheirs: { backgroundColor: colors.bubbleTheirs, borderBottomLeftRadius: radius.sm },
   sender: { fontSize: fonts.small - 1, fontWeight: '800', color: colors.primary, marginBottom: 2 },
   quote: { borderLeftWidth: 3, paddingLeft: spacing.sm, marginBottom: 4, paddingVertical: 2 },
-  quoteMine: { borderLeftColor: '#D6E5F5' },
+  quoteMine: { borderLeftColor: '#CFE8DA' },
   quoteTheirs: { borderLeftColor: colors.primary },
   quoteText: { fontSize: fonts.small, opacity: 0.85 },
   composeBar: {
@@ -1492,7 +1492,7 @@ function makeStyles(colors: Colors, fonts: Fonts) {
   textTheirs: { color: colors.text },
   bubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6, justifyContent: 'flex-end' },
   time: { fontSize: fonts.small - 3 },
-  timeMine: { color: '#D6E5F5' },
+  timeMine: { color: '#CFE8DA' },
   timeTheirs: { color: colors.textMuted },
 
   composer: {
